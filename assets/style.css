@@ -14,9 +14,9 @@
   --green:     #4caf7d;
   --red:       #e05c5c;
   --blue:      #5b9bd5;
-  --muted:     #5a5e68;
-  --text:      #d4d6db;
-  --text2:     #8a8f9a;
+  --muted:     #787d8c;
+  --text:      #dfe1e6;
+  --text2:     #a0a6b3;
   --mono:      'IBM Plex Mono', monospace;
   --sans:      'IBM Plex Sans', sans-serif;
   --radius:    4px;
@@ -29,7 +29,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   min-height: 100vh;
 }
@@ -82,7 +82,7 @@ body::before {
   text-transform: uppercase;
 }
 .logo-sub {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   letter-spacing: 0.12em;
   margin-top: 2px;
@@ -112,7 +112,7 @@ nav a .icon { font-size: 14px; width: 16px; text-align: center; }
 
 .nav-section {
   padding: 14px var(--gutter) 4px;
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--muted);
@@ -135,7 +135,7 @@ nav a .icon { font-size: 14px; width: 16px; text-align: center; }
 }
 .page-title span { color: var(--amber); }
 .page-subtitle {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   font-family: var(--sans);
 }
@@ -149,7 +149,7 @@ nav a .icon { font-size: 14px; width: 16px; text-align: center; }
   margin-bottom: 20px;
 }
 .panel-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -305,7 +305,7 @@ td.actions { white-space: nowrap; text-align: right; }
   border-bottom: 1px solid var(--border);
 }
 .episode-row:last-child { border-bottom: none; }
-.ep-num   { color: var(--muted); font-size: 11px; width: 26px; flex-shrink: 0; padding-top: 1px; }
+.ep-num   { color: var(--muted); font-size: 12px; width: 26px; flex-shrink: 0; padding-top: 1px; }
 .ep-markers { flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
 .ep-marker { font-size: 10px; line-height: 1; }
 .ep-marker.played { color: var(--green); }
@@ -313,7 +313,7 @@ td.actions { white-space: nowrap; text-align: right; }
 .ep-marker.empty  { color: transparent; }
 .ep-body  { flex: 1; min-width: 0; }
 .ep-title { font-family: var(--sans); font-size: 13px; color: var(--text); font-weight: 500; }
-.ep-meta  { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.ep-meta  { font-size: 12px; color: var(--text2); margin-top: 2px; }
 .ep-actions { flex-shrink: 0; display: flex; gap: 4px; align-items: center; }
 
 /* ── Status badges ── */
