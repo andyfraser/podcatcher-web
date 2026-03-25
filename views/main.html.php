@@ -149,6 +149,10 @@
           </div>
           <button class="btn btn-primary" id="btn-update" onclick="doUpdate()">↻ Update</button>
         </div>
+        <label class="checkbox-row mt8">
+          <input type="checkbox" id="update-auto-dl">
+          Download new episodes automatically
+        </label>
         <div id="update-result" class="mt8"></div>
       </div>
     </div>

@@ -116,6 +116,7 @@ async function doAdd() {
 // ── Update ──────────────────────────────────────────────────────────────────
 async function doUpdate() {
   const slug    = document.getElementById('update-slug').value;
+  const autoDl  = document.getElementById('update-auto-dl').checked;
   const btn     = document.getElementById('btn-update');
   btn.disabled  = true;
   btn.innerHTML = '<span class="spinner"></span> Updating…';
@@ -123,6 +124,19 @@ async function doUpdate() {
   btn.disabled  = false;
   btn.innerHTML = '↻ Update';
   setResult('update-result', data);
+
+  const newEps = data.new_episodes || [];
+  if (autoDl && newEps.length) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.nav-link').forEach(a => a.classList.remove('active'));
+    document.getElementById('tab-download').classList.add('active');
+    document.querySelector('[data-tab="tab-download"]').classList.add('active');
+    toast(`Downloading ${newEps.length} new episode(s)…`, 'info');
+    for (const ep of newEps) {
+      sseDownloadOne(ep.slug, ep.ep_num, ep.title, ep.feed_title);
+      await new Promise(r => setTimeout(r, 200));
+    }
+  }
 }
 
 // ── Remove ──────────────────────────────────────────────────────────────────

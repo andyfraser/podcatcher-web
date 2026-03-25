@@ -215,8 +215,9 @@ function action_update(): array {
         $targets = $feeds;
     }
 
-    $total_new = 0;
-    $log       = [];
+    $total_new    = 0;
+    $log          = [];
+    $new_episodes = [];
 
     foreach ($targets as $s => $feed) {
         $result = fetch_url($feed['url']);
@@ -249,13 +250,28 @@ function action_update(): array {
         $feeds[$s]['known_guids']  = array_column($new_eps, 'guid');
         $feeds[$s]['last_updated'] = date('c');
 
+        $feed_title = $feeds[$s]['meta']['title'];
+        foreach ($new_eps as $i => $ep) {
+            if (!isset($known_guids[$ep['guid']])) {
+                $new_episodes[] = [
+                    'slug'       => $s,
+                    'ep_num'     => $i + 1,
+                    'title'      => $ep['title'],
+                    'feed_title' => $feed_title,
+                ];
+            }
+        }
+
         $n          = count($fresh);
         $total_new += $n;
         $log[]      = "[{$s}] ✔ " . ($n > 0 ? "{$n} new episode(s)" : "No new episodes");
     }
 
     save_feeds($feeds);
-    return ['success' => implode('<br>', $log) . "<br><em>{$total_new} new episode(s) total.</em>"];
+    return [
+        'success'      => implode('<br>', $log) . "<br><em>{$total_new} new episode(s) total.</em>",
+        'new_episodes' => $new_episodes,
+    ];
 }
 
 function action_remove(): array {

@@ -231,6 +231,20 @@ input::placeholder { color: var(--muted); }
 .btn-danger:hover { background: rgba(224,92,92,0.1); }
 .btn-sm { padding: 4px 10px; font-size: 11px; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text2);
+  cursor: pointer;
+  user-select: none;
+}
+.checkbox-row input[type=checkbox] {
+  width: auto;
+  accent-color: var(--amber);
+  cursor: pointer;
+}
 
 /* ── Toast ── */
 #toast-container {
