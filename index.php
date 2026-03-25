@@ -152,7 +152,7 @@ function parse_episode(SimpleXMLElement $item): ?array {
         'file_size'   => $file_size,
         'mime_type'   => $mime_type,
         'duration'    => $duration,
-        'description' => trim(substr(strip_tags($description), 0, 300)),
+        'description' => trim(strip_tags($description, '<p><br><a><strong><b><em><i><ul><ol><li><h1><h2><h3><h4><blockquote>')),
     ];
 }
 
@@ -301,14 +301,19 @@ function action_search(): array {
     $output = [];
 
     foreach ($feeds as $slug => $feed) {
-        $matches = array_filter($feed['episodes'] ?? [], fn($ep) =>
-            str_contains(strtolower($ep['title']), $query) ||
-            str_contains(strtolower($ep['description'] ?? ''), $query)
-        );
+        $matches = [];
+        foreach (($feed['episodes'] ?? []) as $idx => $ep) {
+            if (str_contains(strtolower($ep['title']), $query) ||
+                str_contains(strtolower($ep['description'] ?? ''), $query)) {
+                $ep['ep_num'] = $idx + 1;
+                $matches[] = $ep;
+                if (count($matches) >= $limit) break;
+            }
+        }
         if ($matches) {
             $output[$slug] = [
                 'title'    => $feed['meta']['title'],
-                'episodes' => array_slice(array_values($matches), 0, $limit),
+                'episodes' => $matches,
             ];
         }
     }

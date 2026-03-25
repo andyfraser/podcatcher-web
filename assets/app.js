@@ -279,6 +279,58 @@ async function doDownload(all) {
   }
 }
 
+// ── Episode Detail Overlay ───────────────────────────────────────────────────
+function showEpisodeDetail(slug, epNum, ep, feedTitle) {
+  document.getElementById('detail-feed-name').textContent = feedTitle + '  [' + slug + ']';
+  document.getElementById('detail-ep-title').textContent  = ep.title;
+
+  const metaEl = document.getElementById('detail-meta');
+  metaEl.innerHTML = '';
+  const addMeta = (text, cls) => {
+    const s = document.createElement('span');
+    s.textContent = text;
+    if (cls) s.className = cls;
+    metaEl.appendChild(s);
+  };
+  if (ep.pub_date)    addMeta(ep.pub_date.substring(0, 16));
+  if (ep.duration)    addMeta(ep.duration);
+  if (ep.file_size > 0) addMeta((ep.file_size / 1048576).toFixed(1) + ' MB');
+  if (ep.local_path)  addMeta('⬇ downloaded', 'text-blue');
+  if (ep.played)      addMeta('✔ played', 'text-green');
+
+  document.getElementById('detail-desc').innerHTML = ep.description || '<em>No description available.</em>';
+
+  const actions = document.getElementById('detail-actions');
+  actions.innerHTML = '';
+
+  const mediaBtn = document.createElement('button');
+  mediaBtn.className = 'btn btn-primary';
+  if (ep.local_path) {
+    mediaBtn.textContent = '▶ Play';
+    mediaBtn.addEventListener('click', () => { closeDetail(); playEpisode(slug, epNum, ep.title, feedTitle); });
+  } else {
+    mediaBtn.textContent = '⬇ Download';
+    mediaBtn.addEventListener('click', () => { closeDetail(); startDownloadFromStatus(slug, epNum, ep.title, feedTitle); });
+  }
+  actions.appendChild(mediaBtn);
+
+  const markBtn = document.createElement('button');
+  markBtn.className   = 'btn btn-ghost';
+  markBtn.textContent = ep.played ? '✕ Mark Unplayed' : '✔ Mark Played';
+  markBtn.addEventListener('click', async () => { closeDetail(); await quickMark(slug, epNum, ep.played); });
+  actions.appendChild(markBtn);
+
+  document.getElementById('detail-overlay').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detail-overlay').classList.remove('open');
+}
+
+document.getElementById('detail-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeDetail();
+});
+
 // ── Search ───────────────────────────────────────────────────────────────────
 async function doSearch() {
   const query     = document.getElementById('search-query').value.trim();
@@ -292,20 +344,36 @@ async function doSearch() {
     container.innerHTML = `<div class="empty">No episodes matched "<strong>${escHtml(data.query)}</strong>".</div>`;
     return;
   }
-  let html = '';
+  container.innerHTML = '';
   for (const [slug, group] of Object.entries(results)) {
-    html += `<div class="search-group">
-      <div class="search-group-title">[${escHtml(slug)}] ${escHtml(group.title)}</div>`;
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'search-group';
+
+    const groupTitle = document.createElement('div');
+    groupTitle.className = 'search-group-title';
+    groupTitle.textContent = '[' + slug + '] ' + group.title;
+    groupDiv.appendChild(groupTitle);
+
     for (const ep of group.episodes) {
-      const d = ep.pub_date ? ep.pub_date.substring(0, 16) : '';
-      html += `<div class="search-ep">
-        <div class="search-ep-title">${escHtml(ep.title)}</div>
-        <div class="search-ep-date">${escHtml(d)}</div>
-      </div>`;
+      const row = document.createElement('div');
+      row.className = 'search-ep';
+
+      const titleEl = document.createElement('div');
+      titleEl.className = 'search-ep-title';
+      titleEl.textContent = ep.title;
+
+      const dateEl = document.createElement('div');
+      dateEl.className = 'search-ep-date';
+      dateEl.textContent = ep.pub_date ? ep.pub_date.substring(0, 16) : '';
+
+      row.appendChild(titleEl);
+      row.appendChild(dateEl);
+      row.addEventListener('click', () => showEpisodeDetail(slug, ep.ep_num, ep, group.title));
+      groupDiv.appendChild(row);
     }
-    html += `</div>`;
+
+    container.appendChild(groupDiv);
   }
-  container.innerHTML = html;
 }
 
 // ── Status ───────────────────────────────────────────────────────────────────
@@ -402,6 +470,13 @@ function renderStatus(slug, feed, count, panel) {
       markBtn.textContent = ep.played ? 'unplayed' : 'mark played';
       markBtn.addEventListener('click', () => quickMark(slug, epNum, ep.played));
       actions.appendChild(markBtn);
+
+      const infoBtn = document.createElement('button');
+      infoBtn.className   = 'btn btn-ghost btn-sm';
+      infoBtn.title       = 'View details';
+      infoBtn.textContent = '…';
+      infoBtn.addEventListener('click', () => showEpisodeDetail(slug, epNum, ep, meta.title));
+      actions.appendChild(infoBtn);
 
       wrap.appendChild(row);
     });

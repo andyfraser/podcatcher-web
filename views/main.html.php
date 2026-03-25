@@ -298,6 +298,22 @@
   </main>
 </div>
 
+<!-- ── Episode Detail Overlay ── -->
+<div class="overlay" id="detail-overlay">
+  <div class="dialog detail-dialog">
+    <div class="detail-header">
+      <div style="min-width:0">
+        <div class="detail-feed-name" id="detail-feed-name"></div>
+        <div class="detail-ep-title" id="detail-ep-title"></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="closeDetail()" style="flex-shrink:0">✕</button>
+    </div>
+    <div class="detail-meta" id="detail-meta"></div>
+    <div class="detail-desc" id="detail-desc"></div>
+    <div class="detail-actions" id="detail-actions"></div>
+  </div>
+</div>
+
 <!-- ── Confirm Dialog ── -->
 <div class="overlay" id="confirm-overlay">
   <div class="dialog">
