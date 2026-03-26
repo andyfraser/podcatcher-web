@@ -435,7 +435,7 @@ function renderStatus(slug, feed, count, panel) {
       <span class="meta-key">Episodes</span>  <span class="meta-val">${episodes.length}</span>
       <span class="meta-key">Played</span>    <span class="meta-val">${played} / ${episodes.length}</span>
     </div>
-    ${meta.description ? `<div style="font-size:12px;color:var(--text2);font-family:var(--sans);margin-bottom:14px;">${escHtml(meta.description)}</div>` : ''}
+    ${meta.description ? descriptionHtml(meta.description) : ''}
     <div class="panel-title" style="margin-top:4px">Latest ${shown.length} Episode(s)</div>`;
 
   if (!shown.length) {
@@ -454,13 +454,15 @@ function renderStatus(slug, feed, count, panel) {
       row.className = 'episode-row';
       row.innerHTML = `
         <div class="ep-num">${epNum}.</div>
-        <div class="ep-markers">
-          <span class="ep-marker ${ep.played ? 'played' : 'empty'}" title="${ep.played ? 'Played' : ''}">${ep.played ? '\u2714' : '\u00b7'}</span>
-          <span class="ep-marker ${ep.local_path ? 'dl' : 'empty'}" title="${ep.local_path ? 'Downloaded' : ''}">${ep.local_path ? '\u2b07' : '\u00b7'}</span>
-        </div>
         <div class="ep-body">
-          <div class="ep-title">${escHtml(ep.title)}</div>
-          <div class="ep-meta">${escHtml(pub)}${escHtml(dur)}${mb}</div>
+          <div class="ep-title-row">
+            <span class="ep-glyph played${ep.played ? ' on' : ''}" title="${ep.played ? 'Played' : ''}">\u2714</span>
+            <span class="ep-title">${escHtml(ep.title)}</span>
+          </div>
+          <div class="ep-meta-row">
+            <span class="ep-glyph dl${ep.local_path ? ' on' : ''}" title="${ep.local_path ? 'Downloaded' : ''}">\u2b07</span>
+            <span class="ep-meta">${escHtml(pub)}${escHtml(dur)}${mb}</span>
+          </div>
         </div>
         <div class="ep-actions"></div>`;
 
@@ -480,8 +482,8 @@ function renderStatus(slug, feed, count, panel) {
       actions.appendChild(mediaBtn);
 
       const markBtn = document.createElement('button');
-      markBtn.className   = 'btn btn-ghost btn-sm';
-      markBtn.textContent = ep.played ? 'unplayed' : 'mark played';
+      markBtn.className   = 'btn btn-ghost btn-sm ep-mark-btn';
+      markBtn.textContent = ep.played ? 'mark unplayed' : 'mark played';
       markBtn.addEventListener('click', () => quickMark(slug, epNum, ep.played));
       actions.appendChild(markBtn);
 
@@ -591,6 +593,28 @@ function startDownloadFromStatus(slug, episodeNum, title, feedTitle) {
   document.getElementById('tab-download').classList.add('active');
   document.querySelector('[data-tab="tab-download"]').classList.add('active');
   sseDownloadOne(slug, episodeNum, title, feedTitle);
+}
+
+// ── Description expand/collapse ──────────────────────────────────────────────
+function descriptionHtml(text, maxChars = 220) {
+  if (!text) return '';
+  const esc = escHtml(text);
+  if (text.length <= maxChars) {
+    return `<div class="feed-desc">${esc}</div>`;
+  }
+  const short = escHtml(text.substring(0, maxChars));
+  return `<div class="feed-desc">` +
+    `<span class="desc-short">${short}&hellip; <a href="#" class="desc-toggle" onclick="toggleDesc(this);return false;">show more</a></span>` +
+    `<span class="desc-full" hidden>${esc} <a href="#" class="desc-toggle" onclick="toggleDesc(this);return false;">show less</a></span>` +
+    `</div>`;
+}
+
+function toggleDesc(link) {
+  const wrap  = link.closest('.feed-desc');
+  const short = wrap.querySelector('.desc-short');
+  const full  = wrap.querySelector('.desc-full');
+  short.hidden = !short.hidden;
+  full.hidden  = !full.hidden;
 }
 
 // ── Utility ──────────────────────────────────────────────────────────────────

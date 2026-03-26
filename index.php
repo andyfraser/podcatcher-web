@@ -113,7 +113,7 @@ function parse_feed(string $xml): ?array {
 
     return [
         'title'       => $title,
-        'description' => substr($description, 0, 200),
+        'description' => $description,
         'link'        => $link,
         'last_build'  => $lastBuild,
         'image_url'   => $image_url,

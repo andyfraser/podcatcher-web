@@ -311,24 +311,36 @@ td.actions { white-space: nowrap; text-align: right; }
 .meta-key  { color: var(--muted); white-space: nowrap; }
 .meta-val  { color: var(--text); word-break: break-all; }
 
+.feed-desc {
+  font-size: 12px;
+  color: var(--text2);
+  font-family: var(--sans);
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.desc-toggle { color: var(--blue); text-decoration: none; white-space: nowrap; }
+.desc-toggle:hover { text-decoration: underline; }
+
 .episode-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
-  padding: 10px 0;
+  height: 48px;
   border-bottom: 1px solid var(--border);
+  overflow: hidden;
 }
 .episode-row:last-child { border-bottom: none; }
 .ep-num   { color: var(--muted); font-size: 12px; width: 26px; flex-shrink: 0; padding-top: 1px; }
-.ep-markers { flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
-.ep-marker { font-size: 10px; line-height: 1; }
-.ep-marker.played { color: var(--green); }
-.ep-marker.dl     { color: var(--blue); }
-.ep-marker.empty  { color: transparent; }
-.ep-body  { flex: 1; min-width: 0; }
-.ep-title { font-family: var(--sans); font-size: 13px; color: var(--text); font-weight: 500; }
-.ep-meta  { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.ep-body      { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.ep-title-row,
+.ep-meta-row  { display: flex; align-items: baseline; gap: 5px; overflow: hidden; }
+.ep-glyph     { flex-shrink: 0; width: 12px; font-size: 10px; text-align: center; color: transparent; }
+.ep-glyph.on.played { color: var(--green); }
+.ep-glyph.on.dl     { color: var(--blue); }
+.ep-title { flex: 1; min-width: 0; font-family: var(--sans); font-size: 13px; color: var(--text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-meta  { flex: 1; min-width: 0; font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ep-actions { flex-shrink: 0; display: flex; gap: 4px; align-items: center; }
+.ep-mark-btn { width: 110px; text-align: center; }
 
 /* ── Status badges ── */
 .badge {

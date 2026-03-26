@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/style.css?v=<?= filemtime(__DIR__.'/../assets/style.css') ?>">
 </head>
 <body>
 
@@ -343,6 +343,6 @@
   <button id="player-close" onclick="closePlayer()" title="Close player">✕</button>
 </div>
 
-<script src="assets/app.js"></script>
+<script src="assets/app.js?v=<?= filemtime(__DIR__.'/../assets/app.js') ?>"></script>
 </body>
 </html>
