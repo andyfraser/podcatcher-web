@@ -189,6 +189,15 @@ input[type=text], input[type=url], input[type=number], select {
   transition: border-color 0.15s;
   width: 100%;
 }
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%23a0a6b3' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+  cursor: pointer;
+}
 input:focus, select:focus {
   border-color: var(--amber-dim);
   box-shadow: 0 0 0 2px rgba(245,166,35,0.1);
