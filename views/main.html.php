@@ -47,9 +47,9 @@
         <span class="icon">✕</span> Remove
       </a>
     </nav>
-    <div style="padding:12px var(--gutter); border-top:1px solid var(--border);">
-      <div style="font-size:10px;color:var(--muted);line-height:1.7;">
-        Data: <code style="color:var(--text2);">~/.podcatcher/</code>
+    <div class="sidebar-footer">
+      <div class="sidebar-footer-text">
+        Data: <code>~/.podcatcher/</code>
       </div>
     </div>
   </aside>
