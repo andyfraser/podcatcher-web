@@ -8,6 +8,7 @@ tabs.forEach(a => {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
     document.getElementById(a.dataset.tab).classList.add('active');
     if (a.dataset.tab === 'tab-list') refreshPage();
+    if (a.dataset.tab === 'tab-update') document.getElementById('update-result').innerHTML = '';
   });
 });
 
