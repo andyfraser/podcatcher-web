@@ -176,7 +176,11 @@
           </div>
           <div class="form-group" style="max-width:100px">
             <label>Show Episodes</label>
-            <input type="number" id="status-count" value="10" min="1" max="500" oninput="loadStatus()">
+            <select id="status-count" onchange="loadStatus()">
+              <option value="5">5</option>
+              <option value="10" selected>10</option>
+              <option value="0">All</option>
+            </select>
           </div>
         </div>
       </div>

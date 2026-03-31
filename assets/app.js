@@ -398,7 +398,8 @@ let _statusDebounce = null;
 
 async function loadStatus(forceRefresh = false) {
   const slug  = document.getElementById('status-slug').value;
-  const count = parseInt(document.getElementById('status-count').value) || 10;
+  const countVal = parseInt(document.getElementById('status-count').value);
+  const count = isNaN(countVal) ? 10 : countVal;
   const panel = document.getElementById('status-panel');
   if (!slug) { panel.innerHTML = ''; _statusCache = null; _statusSlug = null; return; }
 
@@ -422,7 +423,7 @@ function renderStatus(slug, feed, count, panel) {
   const meta     = feed.meta;
   const episodes = feed.episodes || [];
   const played   = episodes.filter(e => e.played).length;
-  const shown    = episodes.slice(0, count);
+  const shown    = count === 0 ? episodes : episodes.slice(0, count);
 
   const wrap = document.createElement('div');
   wrap.className = 'panel';
