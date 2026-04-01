@@ -72,20 +72,24 @@
           <table>
             <thead>
               <tr>
-                <th>Slug</th>
+                <th>Title</th>
                 <th class="num">Episodes</th>
                 <th>Last Updated</th>
-                <th>Title</th>
+                <th>Slug</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              <?php foreach ($feeds as $slug => $feed): ?>
+              <?php
+                $sorted_feeds = $feeds;
+                uasort($sorted_feeds, fn($a, $b) => strcasecmp($a['meta']['title'] ?? '', $b['meta']['title'] ?? ''));
+              ?>
+              <?php foreach ($sorted_feeds as $slug => $feed): ?>
               <tr>
-                <td class="slug"><?= htmlspecialchars($slug) ?></td>
-                <td class="num"><?= count($feed['episodes'] ?? []) ?></td>
-                <td class="date"><?= htmlspecialchars(substr($feed['last_updated'] ?? '', 0, 19)) ?></td>
                 <td class="title"><?= htmlspecialchars($feed['meta']['title']) ?></td>
+                <td class="num"><?= count($feed['episodes'] ?? []) ?></td>
+                <td class="date"><?= ($lu = $feed['last_updated'] ?? '') ? date('D, j M Y', strtotime($lu)) : '' ?></td>
+                <td class="slug"><?= htmlspecialchars($slug) ?></td>
                 <td class="actions">
                   <button class="btn btn-ghost btn-sm" onclick="openStatus('<?= htmlspecialchars($slug) ?>')">status</button>
                 </td>

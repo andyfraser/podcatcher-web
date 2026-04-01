@@ -539,6 +539,12 @@ async function refreshSelects() {
   refreshList(feeds);
 }
 
+function fmtDate(s) {
+  if (!s) return '';
+  const d = new Date(s.replace(' ', 'T'));
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 function refreshList(feeds) {
   const tbody  = document.querySelector('#tab-list tbody');
   const header = document.querySelector('#tab-list .page-subtitle');
@@ -549,13 +555,15 @@ function refreshList(feeds) {
     return;
   }
   tbody.innerHTML = '';
-  for (const [slug, feed] of Object.entries(feeds)) {
+  const sorted = Object.entries(feeds).sort(([, a], [, b]) =>
+    (a.meta.title || '').localeCompare(b.meta.title || '', undefined, { sensitivity: 'base' }));
+  for (const [slug, feed] of sorted) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="slug">${escHtml(slug)}</td>
-      <td class="num">${(feed.episodes || []).length}</td>
-      <td class="date">${escHtml((feed.last_updated || '').substring(0, 19))}</td>
       <td class="title">${escHtml(feed.meta.title)}</td>
+      <td class="num">${(feed.episodes || []).length}</td>
+      <td class="date">${escHtml(fmtDate(feed.last_updated))}</td>
+      <td class="slug">${escHtml(slug)}</td>
       <td class="actions"><button class="btn btn-ghost btn-sm" onclick="openStatus('${escHtml(slug)}')">status</button></td>`;
     tbody.appendChild(tr);
   }

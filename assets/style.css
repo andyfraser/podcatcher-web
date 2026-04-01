@@ -303,7 +303,7 @@ tbody tr:hover { background: var(--bg3); }
 tbody tr:last-child { border-bottom: none; }
 td { padding: 10px 10px; vertical-align: middle; }
 td.slug { font-weight: 500; color: var(--amber); font-size: 12px; }
-td.num  { text-align: right; color: var(--text2); }
+td.num, th.num  { text-align: center; color: var(--text2); }
 td.date { color: var(--text2); font-size: 11px; white-space: nowrap; }
 td.title { font-family: var(--sans); font-size: 13px; }
 td.actions { white-space: nowrap; text-align: right; }
