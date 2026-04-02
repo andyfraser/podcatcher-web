@@ -27,6 +27,9 @@
       <a href="#" class="nav-link" data-tab="tab-add">
         <span class="icon">+</span> Add Feed
       </a>
+      <a href="#" class="nav-link" data-tab="tab-discover">
+        <span class="icon">★</span> Discover
+      </a>
       <a href="#" class="nav-link" data-tab="tab-update">
         <span class="icon">↻</span> Update
       </a>
@@ -309,6 +312,24 @@
       <div id="search-results"></div>
     </div>
 
+    <!-- ── Discover ── -->
+    <div id="tab-discover" class="tab-content">
+      <div class="page-header">
+        <div class="page-title"><span>$</span> podcatcher discover</div>
+        <div class="page-subtitle">Find new podcasts via iTunes</div>
+      </div>
+      <div class="panel">
+        <div class="form-row">
+          <div class="form-group" style="flex:1">
+            <label>Search Podcasts</label>
+            <input type="text" id="discover-query" placeholder="Search by name, author, or topic..." onkeydown="if(event.key==='Enter')doDiscover()">
+          </div>
+          <button class="btn btn-primary" onclick="doDiscover()">★ Search</button>
+        </div>
+      </div>
+      <div id="discover-results" class="discover-grid"></div>
+    </div>
+
   </main>
 </div>
 
@@ -349,7 +370,22 @@
     <strong id="player-ep-title">—</strong>
     <span id="player-feed-title"></span>
   </div>
-  <audio id="player-audio" controls preload="metadata"></audio>
+  <div class="player-controls">
+    <div class="player-btns">
+      <button class="btn-player" onclick="skipPlayer(-30)" title="Back 30s">⟲ 30</button>
+      <button class="btn-player" onclick="skipPlayer(-10)" title="Back 10s">⟲ 10</button>
+      <button class="btn-player" onclick="skipPlayer(10)" title="Forward 10s">10 ⟳</button>
+      <button class="btn-player" onclick="skipPlayer(30)" title="Forward 30s">30 ⟳</button>
+      <select id="player-speed" onchange="setPlayerSpeed(this.value)" class="player-speed-select" title="Playback Speed">
+        <option value="0.75">0.75x</option>
+        <option value="1" selected>1.0x</option>
+        <option value="1.25">1.25x</option>
+        <option value="1.5">1.5x</option>
+        <option value="2">2.0x</option>
+      </select>
+    </div>
+    <audio id="player-audio" controls preload="metadata"></audio>
+  </div>
   <button id="player-close" onclick="closePlayer()" title="Close player">✕</button>
 </div>
 

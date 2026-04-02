@@ -391,6 +391,54 @@ async function doSearch() {
   }
 }
 
+// ── Discover ─────────────────────────────────────────────────────────────────
+async function doDiscover() {
+  const query     = document.getElementById('discover-query').value.trim();
+  const container = document.getElementById('discover-results');
+  if (!query) { toast('Enter a podcast name or topic', 'error'); return; }
+
+  container.innerHTML = '<div class="empty"><span class="spinner"></span> Searching iTunes...</div>';
+
+  const data = await api('discover', { query });
+  if (data.error) {
+    container.innerHTML = `<div class="empty text-red">✗ ${escHtml(data.error)}</div>`;
+    return;
+  }
+
+  const results = data.results || [];
+  if (results.length === 0) {
+    container.innerHTML = `<div class="empty">No podcasts found for "<strong>${escHtml(query)}</strong>".</div>`;
+    return;
+  }
+
+  container.innerHTML = '';
+  results.forEach(res => {
+    const card = document.createElement('div');
+    card.className = 'discover-card';
+    card.innerHTML = `
+      <img src="${escHtml(res.image)}" alt="Artwork" class="discover-img">
+      <div class="discover-body">
+        <div class="discover-title" title="${escHtml(res.title)}">${escHtml(res.title)}</div>
+        <div class="discover-author">${escHtml(res.author)}</div>
+        <div class="discover-genres">${escHtml(res.genres.slice(0, 2).join(', '))}</div>
+        <button class="btn btn-primary btn-sm mt8" onclick="addFromDiscover('${escHtml(res.url)}')">+ Add</button>
+      </div>`;
+    container.appendChild(card);
+  });
+}
+
+async function addFromDiscover(url) {
+  tabs.forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  const addTabLink = document.querySelector('[data-tab="tab-add"]');
+  addTabLink.classList.add('active');
+  document.getElementById('tab-add').classList.add('active');
+
+  document.getElementById('add-url').value = url;
+  document.getElementById('add-name').focus();
+  toast('Feed URL copied to Add tab', 'info');
+}
+
 // ── Status ───────────────────────────────────────────────────────────────────
 let _statusCache    = null;
 let _statusSlug     = null;
@@ -572,6 +620,8 @@ function refreshList(feeds) {
 function refreshPage() { refreshSelects(); }
 
 // ── Audio Player ─────────────────────────────────────────────────────────────
+let currentPlayerSpeed = 1;
+
 function playEpisode(slug, episodeNum, title, feedTitle) {
   const bar   = document.getElementById('player-bar');
   const audio = document.getElementById('player-audio');
@@ -583,9 +633,14 @@ function playEpisode(slug, episodeNum, title, feedTitle) {
   et.textContent = title;
   ft.textContent = feedTitle;
   bar.classList.add('open');
+
+  // Apply current speed to new source
+  audio.playbackRate = currentPlayerSpeed;
+  document.getElementById('player-speed').value = currentPlayerSpeed;
+
   audio.play().catch(() => {});
 
-  document.querySelector('.main').style.paddingBottom = '72px';
+  document.querySelector('.main').style.paddingBottom = '84px';
 }
 
 function closePlayer() {
@@ -594,6 +649,20 @@ function closePlayer() {
   audio.src = '';
   document.getElementById('player-bar').classList.remove('open');
   document.querySelector('.main').style.paddingBottom = '';
+}
+
+function skipPlayer(seconds) {
+  const audio = document.getElementById('player-audio');
+  if (!audio.src) return;
+  audio.currentTime += seconds;
+}
+
+function setPlayerSpeed(rate) {
+  const audio = document.getElementById('player-audio');
+  currentPlayerSpeed = parseFloat(rate);
+  if (audio.src) {
+    audio.playbackRate = currentPlayerSpeed;
+  }
 }
 
 // Start a download from the status view and switch to the download tab

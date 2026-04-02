@@ -337,6 +337,31 @@ function action_search(): array {
     return ['results' => $output, 'query' => $_POST['query'] ?? ''];
 }
 
+function action_discover(): array {
+    $query = trim($_POST['query'] ?? '');
+    if (!$query) return ['error' => 'Query is required.'];
+
+    $url = "https://itunes.apple.com/search?term=" . urlencode($query) . "&entity=podcast&limit=24";
+    $res = fetch_url($url);
+    if (!$res['ok']) return ['error' => 'Discovery failed: ' . $res['error']];
+
+    $data = json_decode($res['body'], true);
+    $results = [];
+    foreach ($data['results'] ?? [] as $item) {
+        // Use 600x600 artwork if available, otherwise fall back to 100x100
+        $image = $item['artworkUrl600'] ?? $item['artworkUrl100'] ?? '';
+        
+        $results[] = [
+            'title'  => $item['collectionName'] ?? 'Unknown',
+            'author' => $item['artistName'] ?? '',
+            'url'    => $item['feedUrl'] ?? '',
+            'image'  => $image,
+            'genres' => $item['genres'] ?? [],
+        ];
+    }
+    return ['results' => $results];
+}
+
 // ─── Stream local audio file ───────────────────────────────────────────────────
 
 function action_stream(): void {
@@ -535,6 +560,7 @@ if ($is_ajax && $action) {
         'remove'      => action_remove(),
         'mark_played' => action_mark_played(),
         'search'      => action_search(),
+        'discover'    => action_discover(),
         'get_feeds'   => ['feeds' => load_feeds()],
         default       => ['error' => 'Unknown action'],
     };
@@ -545,3 +571,4 @@ if ($is_ajax && $action) {
 $feeds = load_feeds();
 
 require __DIR__ . '/views/main.html.php';
+
