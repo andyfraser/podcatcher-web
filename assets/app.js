@@ -96,6 +96,12 @@ function renderStatus() {
   if (!panel) return;
 
   const slug = state.statusSlug;
+  
+  const sel = document.getElementById('status-slug');
+  if (sel && sel.value !== (slug || '')) {
+    sel.value = slug || '';
+  }
+
   const feed = state.feeds[slug];
 
   if (!slug) { panel.innerHTML = ''; return; }
@@ -113,8 +119,8 @@ function renderStatus() {
       <div class="meta-grid">
         <span class="meta-key">Slug</span>      <span class="meta-val text-amber">${escHtml(slug)}</span>
         <span class="meta-key">URL</span>       <span class="meta-val"><a href="${escHtml(feed.url)}" target="_blank" style="color:var(--blue)">${escHtml(feed.url)}</a></span>
-        <span class="meta-key">Added</span>     <span class="meta-val">${escHtml((feed.added || '').substring(0, 19))}</span>
-        <span class="meta-key">Updated</span>   <span class="meta-val">${escHtml((feed.last_updated || '').substring(0, 19))}</span>
+        <span class="meta-key">Added</span>     <span class="meta-val">${escHtml(fmtDate(feed.added))}</span>
+        <span class="meta-key">Updated</span>   <span class="meta-val">${escHtml(fmtDate(feed.last_updated))}</span>
         <span class="meta-key">Episodes</span>  <span class="meta-val">${episodes.length}</span>
         <span class="meta-key">Played</span>    <span class="meta-val">${played} / ${episodes.length}</span>
       </div>
@@ -308,7 +314,7 @@ function updateSelectOptions() {
     const sorted = Object.entries(feeds).sort(([, a], [, b]) =>
       (a.meta.title || '').localeCompare(b.meta.title || '', undefined, { sensitivity: 'base' }));
     for (const [s, f] of sorted)
-      h += `<option value="${escHtml(s)}">${escHtml(s)} — ${escHtml(f.meta.title)}</option>`;
+      h += `<option value="${escHtml(s)}">${escHtml(f.meta.title)} (${escHtml(s)})</option>`;
     return h;
   };
 

@@ -159,7 +159,7 @@
             <select id="update-slug">
               <option value="">— All Feeds —</option>
               <?php foreach ($feeds as $slug => $feed): ?>
-              <option value="<?= htmlspecialchars($slug) ?>"><?= htmlspecialchars($slug) ?> — <?= htmlspecialchars($feed['meta']['title']) ?></option>
+              <option value="<?= htmlspecialchars($slug) ?>"><?= htmlspecialchars($feed['meta']['title']) ?> (<?= htmlspecialchars($slug) ?>)</option>
               <?php endforeach; ?>
             </select>
           </div>
@@ -186,7 +186,7 @@
             <select id="status-slug" onchange="loadStatus()">
               <option value="">— Choose a feed —</option>
               <?php foreach ($feeds as $slug => $feed): ?>
-              <option value="<?= htmlspecialchars($slug) ?>"><?= htmlspecialchars($slug) ?> — <?= htmlspecialchars($feed['meta']['title']) ?></option>
+              <option value="<?= htmlspecialchars($slug) ?>"><?= htmlspecialchars($feed['meta']['title']) ?> (<?= htmlspecialchars($slug) ?>)</option>
               <?php endforeach; ?>
             </select>
           </div>
@@ -219,7 +219,7 @@
             <select id="dl-slug" onchange="populateDlEpisodes()">
               <option value="">— All Feeds —</option>
               <?php foreach ($feeds as $slug => $feed): ?>
-              <option value="<?= htmlspecialchars($slug) ?>"><?= htmlspecialchars($slug) ?> — <?= htmlspecialchars($feed['meta']['title']) ?></option>
+              <option value="<?= htmlspecialchars($slug) ?>"><?= htmlspecialchars($feed['meta']['title']) ?> (<?= htmlspecialchars($slug) ?>)</option>
               <?php endforeach; ?>
             </select>
           </div>
@@ -255,7 +255,7 @@
             <select id="mark-slug">
               <option value="">— Choose a feed —</option>
               <?php foreach ($feeds as $slug => $feed): ?>
-              <option value="<?= htmlspecialchars($slug) ?>"><?= htmlspecialchars($slug) ?> — <?= htmlspecialchars($feed['meta']['title']) ?></option>
+              <option value="<?= htmlspecialchars($slug) ?>"><?= htmlspecialchars($feed['meta']['title']) ?> (<?= htmlspecialchars($slug) ?>)</option>
               <?php endforeach; ?>
             </select>
           </div>
@@ -286,7 +286,7 @@
             <select id="remove-slug">
               <option value="">— Choose a feed —</option>
               <?php foreach ($feeds as $slug => $feed): ?>
-              <option value="<?= htmlspecialchars($slug) ?>"><?= htmlspecialchars($slug) ?> — <?= htmlspecialchars($feed['meta']['title']) ?></option>
+              <option value="<?= htmlspecialchars($slug) ?>"><?= htmlspecialchars($feed['meta']['title']) ?> (<?= htmlspecialchars($slug) ?>)</option>
               <?php endforeach; ?>
             </select>
           </div>
