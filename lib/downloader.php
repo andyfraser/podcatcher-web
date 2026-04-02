@@ -75,16 +75,20 @@ function download_episode(string $slug, int $episodeNum, ?callable $progress_cb 
     $dest     = $dest_dir . '/' . $filename;
 
     if (file_exists($dest)) {
-        $feeds[$slug]['episodes'][$idx]['local_path'] = $dest;
-        save_feeds($feeds);
-        return [
-            'pct'      => 100,
-            'mb_done'  => round(filesize($dest) / 1048576, 1),
-            'mb_total' => round(filesize($dest) / 1048576, 1),
-            'done'     => true,
-            'path'     => $dest,
-            'already'  => true,
-        ];
+        if (filesize($dest) < 1024) {
+            @unlink($dest); // Delete corrupted/empty stub file
+        } else {
+            $feeds[$slug]['episodes'][$idx]['local_path'] = $dest;
+            save_feeds($feeds);
+            return [
+                'pct'      => 100,
+                'mb_done'  => round(filesize($dest) / 1048576, 1),
+                'mb_total' => round(filesize($dest) / 1048576, 1),
+                'done'     => true,
+                'path'     => $dest,
+                'already'  => true,
+            ];
+        }
     }
 
     $ctx = stream_context_create([
@@ -140,9 +144,9 @@ function download_episode(string $slug, int $episodeNum, ?callable $progress_cb 
     fclose($remote);
     fclose($local);
 
-    if ($downloaded === 0) {
+    if ($downloaded < 1024) {
         @unlink($dest);
-        return ['error' => 'Download produced empty file'];
+        return ['error' => 'Download produced empty or invalid file'];
     }
 
     // Reload feeds to prevent race conditions during long downloads

@@ -46,8 +46,8 @@ function action_add(): array {
     return ['success' => "Added <strong>{$meta['title']}</strong> as <code>[{$slug}]</code> — {$count} episode(s) found."];
 }
 
-function action_update(): array {
-    $slug  = trim($_POST['slug'] ?? '');
+function action_update(?callable $progress_cb = null): array {
+    $slug  = trim($_REQUEST['slug'] ?? '');
     $feeds = load_feeds();
     if (!$feeds) return ['error' => 'No feeds to update.'];
 
@@ -63,11 +63,24 @@ function action_update(): array {
     $new_episodes = [];
 
     foreach ($targets as $s => $feed) {
+        $feed_title = $feed['meta']['title'] ?? $s;
+        if ($progress_cb) $progress_cb(['status' => "Checking {$feed_title} [{$s}]..."]);
+
         $result = fetch_url($feed['url']);
-        if (!$result['ok']) { $log[] = "[{$s}] ✗ Fetch failed"; continue; }
+        if (!$result['ok']) { 
+            $msg = "[{$s}] ✗ Fetch failed";
+            $log[] = $msg;
+            if ($progress_cb) $progress_cb(['status' => $msg]);
+            continue; 
+        }
 
         $parsed = parse_feed($result['body']);
-        if (!$parsed) { $log[] = "[{$s}] ✗ Parse failed"; continue; }
+        if (!$parsed) { 
+            $msg = "[{$s}] ✗ Parse failed";
+            $log[] = $msg;
+            if ($progress_cb) $progress_cb(['status' => $msg]);
+            continue; 
+        }
 
         $new_eps     = $parsed['episodes'];
         $known_guids = array_flip($feed['known_guids'] ?? []);
@@ -107,14 +120,39 @@ function action_update(): array {
 
         $n          = count($fresh);
         $total_new += $n;
-        $log[]      = "[{$s}] ✔ " . ($n > 0 ? "{$n} new episode(s)" : "No new episodes");
+        $msg        = "[{$s}] ✔ " . ($n > 0 ? "{$n} new episode(s)" : "No new episodes");
+        $log[]      = $msg;
+        if ($progress_cb) $progress_cb(['status' => $msg]);
     }
 
     save_feeds($feeds);
-    return [
+    $res = [
         'success'      => implode('<br>', $log) . "<br><em>{$total_new} new episode(s) total.</em>",
         'new_episodes' => $new_episodes,
     ];
+    if ($progress_cb) $progress_cb(array_merge(['done' => true, 'total_new' => $total_new], $res));
+    return $res;
+}
+
+function action_sse_update(): void {
+    while (ob_get_level()) ob_end_clean();
+    set_time_limit(0);
+
+    header('Content-Type: text/event-stream');
+    header('Cache-Control: no-cache');
+    header('X-Accel-Buffering: no');
+
+    $res = action_update(function($data) {
+        echo 'data: ' . json_encode($data) . "\n\n";
+        flush();
+    });
+    
+    // In case there was an error before callback could run
+    if (isset($res['error'])) {
+        echo 'data: ' . json_encode(['error' => $res['error']]) . "\n\n";
+        flush();
+    }
+    exit;
 }
 
 function action_remove(): array {
@@ -224,14 +262,33 @@ function action_save_progress(): array {
     $feeds[$slug]['episodes'][$idx]['last_listen'] = date('c');
 
     // Automatically mark as played if near the end (e.g., > 95% or < 30s remaining)
+    $auto_played = false;
     if ($duration > 0) {
         $percent = ($position / $duration) * 100;
         $remaining = $duration - $position;
         if ($percent > 95 || $remaining < 30) {
             $feeds[$slug]['episodes'][$idx]['played'] = true;
+            $auto_played = true;
         }
     }
 
     save_feeds($feeds);
-    return ['success' => true];
+    return ['success' => true, 'auto_played' => $auto_played];
+}
+
+function action_remove_download(): array {
+    $slug    = trim($_POST['slug'] ?? '');
+    $episode = (int)($_POST['episode'] ?? 0);
+    $feeds   = load_feeds();
+    if (!isset($feeds[$slug])) return ['error' => 'Feed not found'];
+    $idx = $episode - 1;
+    if (!isset($feeds[$slug]['episodes'][$idx])) return ['error' => 'Episode not found'];
+
+    $path = $feeds[$slug]['episodes'][$idx]['local_path'] ?? '';
+    if ($path && file_exists($path)) {
+        @unlink($path);
+    }
+    $feeds[$slug]['episodes'][$idx]['local_path'] = '';
+    save_feeds($feeds);
+    return ['success' => 'Download removed.'];
 }

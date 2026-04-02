@@ -360,29 +360,50 @@ async function doUpdate() {
   const slug   = document.getElementById('update-slug').value;
   const autoDl = document.getElementById('update-auto-dl').checked;
   const btn    = document.getElementById('btn-update');
+  const resEl  = document.getElementById('update-result');
 
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Updating…';
-  const data = await api('update', { slug });
-  btn.disabled = false;
-  btn.innerHTML = '↻ Update';
+  resEl.innerHTML = '';
 
-  if (data.error) {
-    toast(data.error, 'error');
-  } else {
-    toast('Feeds updated successfully', 'success');
-    await refreshData();
+  const url = `?action=sse_update&slug=${encodeURIComponent(slug)}`;
+  const es = new EventSource(url);
 
-    const newEps = data.new_episodes || [];
-    if (autoDl && newEps.length) {
-      setState({ activeTab: 'tab-download' });
-      toast(`Downloading ${newEps.length} new episode(s)…`, 'info');
-      for (const ep of newEps) {
-        sseDownloadOne(ep.slug, ep.ep_num, ep.title, ep.feed_title);
-        await new Promise(r => setTimeout(r, 200));
+  es.onmessage = async (e) => {
+    const d = JSON.parse(e.data);
+    if (d.error) {
+      toast(d.error, 'error');
+      es.close();
+      btn.disabled = false;
+      btn.innerHTML = '↻ Update';
+    } else if (d.done) {
+      es.close();
+      btn.disabled = false;
+      btn.innerHTML = '↻ Update';
+      toast('Feeds updated successfully', 'success');
+      resEl.innerHTML += `<div class="text-green mt8">Done. ${d.total_new || 0} new episode(s).</div>`;
+      await refreshData();
+
+      const newEps = d.new_episodes || [];
+      if (autoDl && newEps.length) {
+        setState({ activeTab: 'tab-download' });
+        toast(`Downloading ${newEps.length} new episode(s)…`, 'info');
+        for (const ep of newEps) {
+          sseDownloadOne(ep.slug, ep.ep_num, ep.title, ep.feed_title);
+          await new Promise(r => setTimeout(r, 200));
+        }
       }
+    } else if (d.status) {
+      resEl.innerHTML += `<div style="font-size:13px;color:var(--text2);font-family:monospace">${escHtml(d.status)}</div>`;
     }
-  }
+  };
+
+  es.onerror = () => {
+    es.close();
+    btn.disabled = false;
+    btn.innerHTML = '↻ Update';
+    toast('Connection lost during update', 'error');
+  };
 }
 
 async function doSearch() {
@@ -427,7 +448,7 @@ function changeTheme(theme) {
 }
 
 // ── Audio Player ─────────────────────────────────────────────────────────────
-let progressSyncTimer = null;
+let lastSyncedPosition = -1;
 
 function playEpisode(slug, episodeNum, title, feedTitle) {
   const audio = document.getElementById('player-audio');
@@ -461,7 +482,7 @@ function playEpisode(slug, episodeNum, title, feedTitle) {
   audio.play().catch(() => {});
 }
 
-async function syncProgress() {
+async function syncProgress(force = false) {
   const audio = document.getElementById('player-audio');
   if (!audio.src || !state.player.slug) return;
 
@@ -479,18 +500,29 @@ async function syncProgress() {
     render(); // Re-render to show updated progress bar
   }
 
-  // Only send to backend if not paused (unless it's a final sync)
-  await api('save_progress', {
+  // Skip API call if audio is paused and we aren't forcing a sync
+  if (!force && (audio.paused || position === lastSyncedPosition)) return;
+  lastSyncedPosition = position;
+
+  const res = await api('save_progress', {
     slug,
     episode: epNum,
     position,
     duration
   });
+
+  if (res.auto_played) {
+    if (state.feeds[slug] && state.feeds[slug].episodes[epNum - 1]) {
+      state.feeds[slug].episodes[epNum - 1].played = true;
+      render();
+    }
+  }
 }
 
 function closePlayer() {
   const audio = document.getElementById('player-audio');
-  syncProgress(); // Final sync
+  syncProgress(true); // Final sync
+  lastSyncedPosition = -1;
   audio.pause();
   audio.src = '';
   setState({ player: { ...state.player, open: false } });
@@ -710,11 +742,27 @@ function showEpisodeDetail(slug, epNum) {
   if (ep.local_path) {
     mediaBtn.textContent = '▶ Play';
     mediaBtn.addEventListener('click', () => { closeDetail(); playEpisode(slug, epNum, ep.title, feed.meta.title); });
+    actions.appendChild(mediaBtn);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn btn-ghost text-red';
+    delBtn.textContent = '✕ Delete File';
+    delBtn.addEventListener('click', async () => {
+      closeDetail();
+      const r = await api('remove_download', { slug, episode: epNum });
+      if (r.success) {
+        toast('Download removed', 'success');
+        await refreshData();
+      } else {
+        toast(r.error || 'Failed to remove', 'error');
+      }
+    });
+    actions.appendChild(delBtn);
   } else {
     mediaBtn.textContent = '⬇ Download';
     mediaBtn.addEventListener('click', () => { closeDetail(); startDownloadFromStatus(slug, epNum, ep.title, feed.meta.title); });
+    actions.appendChild(mediaBtn);
   }
-  actions.appendChild(mediaBtn);
 
   const markBtn = document.createElement('button');
   markBtn.className = 'btn btn-ghost';
@@ -818,8 +866,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Audio player listeners
   const audio = document.getElementById('player-audio');
-  audio.addEventListener('pause', syncProgress);
-  audio.addEventListener('ended', syncProgress);
+  audio.addEventListener('pause', () => syncProgress(true));
+  audio.addEventListener('ended', () => syncProgress(true));
   
   // Update local UI state as it plays
   audio.addEventListener('timeupdate', () => {

@@ -62,6 +62,7 @@ ensure_dirs();
 $get_action = $_GET['action'] ?? null;
 if ($get_action === 'stream')       { action_stream(); }
 if ($get_action === 'sse_download') { action_sse_download(); }
+if ($get_action === 'sse_update')   { action_sse_update(); }
 
 $is_ajax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
         && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
@@ -83,6 +84,7 @@ if ($is_ajax && $action) {
         'remove'        => action_remove(),
         'mark_played'   => action_mark_played(),
         'save_progress' => action_save_progress(),
+        'remove_download' => action_remove_download(),
         'search'        => action_search(),
         'discover'      => action_discover(),
         'get_feeds'     => ['feeds' => load_feeds()],

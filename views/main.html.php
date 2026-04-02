@@ -8,6 +8,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css?v=<?= filemtime(__DIR__.'/../assets/style.css') ?>">
+<script>
+  (function() {
+    var theme = localStorage.getItem('podcatcher-theme') || 'auto';
+    document.documentElement.dataset.theme = theme;
+  })();
+</script>
 </head>
 <body>
 
