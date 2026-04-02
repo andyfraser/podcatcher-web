@@ -56,26 +56,16 @@ function sse_event(array $data): void {
     flush();
 }
 
-function action_sse_download(): void {
-    $slug    = preg_replace('/[^a-z0-9_-]/i', '', $_GET['slug'] ?? '');
-    $episode = (int)($_GET['episode'] ?? 0);
-    if (!$slug || $episode < 1) {
-        sse_event(['error' => 'Missing slug or episode']); exit;
-    }
-
-    while (ob_get_level()) ob_end_clean();
-    set_time_limit(0);
-
-    header('Content-Type: text/event-stream');
-    header('Cache-Control: no-cache');
-    header('X-Accel-Buffering: no');
-
+/**
+ * Core download logic reusable for SSE and CLI.
+ */
+function download_episode(string $slug, int $episodeNum, ?callable $progress_cb = null): array {
     $feeds = load_feeds();
-    if (!isset($feeds[$slug])) { sse_event(['error' => "Feed '{$slug}' not found"]); exit; }
+    if (!isset($feeds[$slug])) return ['error' => "Feed '{$slug}' not found"];
 
     $episodes = $feeds[$slug]['episodes'] ?? [];
-    $idx      = $episode - 1;
-    if (!isset($episodes[$idx])) { sse_event(['error' => 'Episode not found']); exit; }
+    $idx      = $episodeNum - 1;
+    if (!isset($episodes[$idx])) return ['error' => 'Episode not found'];
 
     $ep  = $episodes[$idx];
     $url = $ep['audio_url'];
@@ -87,15 +77,14 @@ function action_sse_download(): void {
     if (file_exists($dest)) {
         $feeds[$slug]['episodes'][$idx]['local_path'] = $dest;
         save_feeds($feeds);
-        sse_event([
+        return [
             'pct'      => 100,
             'mb_done'  => round(filesize($dest) / 1048576, 1),
             'mb_total' => round(filesize($dest) / 1048576, 1),
             'done'     => true,
             'path'     => $dest,
             'already'  => true,
-        ]);
-        exit;
+        ];
     }
 
     $ctx = stream_context_create([
@@ -110,9 +99,7 @@ function action_sse_download(): void {
     ]);
 
     $remote = @fopen($url, 'rb', false, $ctx);
-    if (!$remote) {
-        sse_event(['error' => 'Could not open remote URL']); exit;
-    }
+    if (!$remote) return ['error' => 'Could not open remote URL'];
 
     $meta_data = stream_get_meta_data($remote);
     $total     = 0;
@@ -125,7 +112,7 @@ function action_sse_download(): void {
     $local = fopen($dest, 'wb');
     if (!$local) {
         fclose($remote);
-        sse_event(['error' => 'Could not write local file']); exit;
+        return ['error' => 'Could not write local file'];
     }
 
     $downloaded  = 0;
@@ -140,9 +127,9 @@ function action_sse_download(): void {
 
         $pct = $total > 0 ? (int)($downloaded * 100 / $total) : -1;
 
-        if ($pct !== $last_report || ($total === 0 && $downloaded % (256 * 1024) < $chunk_size)) {
+        if ($progress_cb && ($pct !== $last_report || ($total === 0 && $downloaded % (256 * 1024) < $chunk_size))) {
             $last_report = $pct;
-            sse_event([
+            $progress_cb([
                 'pct'      => $pct,
                 'mb_done'  => round($downloaded / 1048576, 1),
                 'mb_total' => $total > 0 ? round($total / 1048576, 1) : null,
@@ -155,19 +142,41 @@ function action_sse_download(): void {
 
     if ($downloaded === 0) {
         @unlink($dest);
-        sse_event(['error' => 'Download produced empty file']); exit;
+        return ['error' => 'Download produced empty file'];
     }
 
+    // Reload feeds to prevent race conditions during long downloads
     $feeds = load_feeds();
     $feeds[$slug]['episodes'][$idx]['local_path'] = $dest;
     save_feeds($feeds);
 
-    sse_event([
+    return [
         'pct'      => 100,
         'mb_done'  => round($downloaded / 1048576, 1),
         'mb_total' => round($downloaded / 1048576, 1),
         'done'     => true,
         'path'     => $dest,
-    ]);
+    ];
+}
+
+function action_sse_download(): void {
+    $slug    = preg_replace('/[^a-z0-9_-]/i', '', $_GET['slug'] ?? '');
+    $episode = (int)($_GET['episode'] ?? 0);
+    if (!$slug || $episode < 1) {
+        sse_event(['error' => 'Missing slug or episode']); exit;
+    }
+
+    while (ob_get_level()) ob_end_clean();
+    set_time_limit(0);
+
+    header('Content-Type: text/event-stream');
+    header('Cache-Control: no-cache');
+    header('X-Accel-Buffering: no');
+
+    $result = download_episode($slug, $episode, function($data) {
+        sse_event($data);
+    });
+
+    sse_event($result);
     exit;
 }

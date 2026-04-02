@@ -412,6 +412,9 @@
   <button id="player-close" onclick="closePlayer()" title="Close player">✕</button>
 </div>
 
+<script>
+  window.PODCATCHER_CSRF_TOKEN = <?= json_encode($_SESSION['csrf_token']) ?>;
+</script>
 <script src="assets/app.js?v=<?= filemtime(__DIR__.'/../assets/app.js') ?>"></script>
 </body>
 </html>

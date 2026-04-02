@@ -730,7 +730,10 @@ async function api(action, params = {}) {
   try {
     const r = await fetch(location.pathname, {
       method: 'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      headers: { 
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-Token': window.PODCATCHER_CSRF_TOKEN || ''
+      },
       body,
     });
     const text = await r.text();
