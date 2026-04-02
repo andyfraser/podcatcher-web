@@ -202,3 +202,36 @@ function action_discover(): array {
     }
     return ['results' => $results];
 }
+
+function action_save_progress(): array {
+    $slug     = trim($_POST['slug'] ?? '');
+    $episode  = (int)($_POST['episode'] ?? 0);
+    $position = (float)($_POST['position'] ?? 0);
+    $duration = (float)($_POST['duration'] ?? 0);
+
+    if (!$slug || $episode < 1) return ['error' => 'Missing slug or episode'];
+
+    $feeds = load_feeds();
+    if (!isset($feeds[$slug])) return ['error' => 'Feed not found'];
+
+    $idx = $episode - 1;
+    if (!isset($feeds[$slug]['episodes'][$idx])) return ['error' => 'Episode not found'];
+
+    $feeds[$slug]['episodes'][$idx]['progress'] = $position;
+    if ($duration > 0) {
+        $feeds[$slug]['episodes'][$idx]['duration_seconds'] = $duration;
+    }
+    $feeds[$slug]['episodes'][$idx]['last_listen'] = date('c');
+
+    // Automatically mark as played if near the end (e.g., > 95% or < 30s remaining)
+    if ($duration > 0) {
+        $percent = ($position / $duration) * 100;
+        $remaining = $duration - $position;
+        if ($percent > 95 || $remaining < 30) {
+            $feeds[$slug]['episodes'][$idx]['played'] = true;
+        }
+    }
+
+    save_feeds($feeds);
+    return ['success' => true];
+}

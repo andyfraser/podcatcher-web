@@ -121,6 +121,13 @@ function renderStatus() {
       const dur   = ep.duration ? ` · ${ep.duration}` : '';
       const mb    = ep.file_size > 0 ? ` · ${(ep.file_size / 1048576).toFixed(1)} MB` : '';
 
+      // Progress bar calculation
+      let progressHtml = '';
+      if (ep.progress > 0 && ep.duration_seconds > 0 && !ep.played) {
+        const pct = Math.min(100, Math.max(0, (ep.progress / ep.duration_seconds) * 100));
+        progressHtml = `<div class="ep-progress-bar"><div class="ep-progress-fill" style="width: ${pct}%"></div></div>`;
+      }
+
       html += `
         <div class="episode-row">
           <div class="ep-num">${epNum}.</div>
@@ -133,6 +140,7 @@ function renderStatus() {
               <span class="ep-glyph dl${ep.local_path ? ' on' : ''}" title="${ep.local_path ? 'Downloaded' : ''}">⬇</span>
               <span class="ep-meta">${escHtml(pub)}${escHtml(dur)}${mb}</span>
             </div>
+            ${progressHtml}
           </div>
           <div class="ep-actions">
             ${ep.local_path
@@ -405,6 +413,8 @@ function addFromDiscover(url) {
 }
 
 // ── Audio Player ─────────────────────────────────────────────────────────────
+let progressSyncTimer = null;
+
 function playEpisode(slug, episodeNum, title, feedTitle) {
   const audio = document.getElementById('player-audio');
   const src = `?action=stream&slug=${encodeURIComponent(slug)}&episode=${episodeNum}`;
@@ -422,11 +432,46 @@ function playEpisode(slug, episodeNum, title, feedTitle) {
 
   audio.src = src;
   audio.playbackRate = state.player.speed;
+
+  // Resume from saved progress
+  const feed = state.feeds[slug];
+  const ep = feed ? feed.episodes[episodeNum - 1] : null;
+  if (ep && ep.progress > 0 && !ep.played) {
+    audio.currentTime = ep.progress;
+  }
+
   audio.play().catch(() => {});
+}
+
+async function syncProgress() {
+  const audio = document.getElementById('player-audio');
+  if (!audio.src || audio.paused || !state.player.slug) return;
+
+  const slug = state.player.slug;
+  const epNum = state.player.episodeNum;
+  const position = audio.currentTime;
+  const duration = audio.duration || 0;
+
+  // Update local state immediately for responsiveness
+  if (state.feeds[slug] && state.feeds[slug].episodes[epNum - 1]) {
+    state.feeds[slug].episodes[epNum - 1].progress = position;
+    if (duration > 0) {
+      state.feeds[slug].episodes[epNum - 1].duration_seconds = duration;
+    }
+    render(); // Re-render to show updated progress bar
+  }
+
+  await api('save_progress', {
+    slug,
+    episode: epNum,
+    position,
+    duration
+  });
 }
 
 function closePlayer() {
   const audio = document.getElementById('player-audio');
+  syncProgress(); // Final sync
   audio.pause();
   audio.src = '';
   setState({ player: { ...state.player, open: false } });
@@ -748,6 +793,14 @@ window.addEventListener('DOMContentLoaded', () => {
       render();
     }
   });
+
+  // Audio player listeners
+  const audio = document.getElementById('player-audio');
+  audio.addEventListener('pause', syncProgress);
+  audio.addEventListener('ended', syncProgress);
+  
+  // Periodic sync every 15 seconds
+  setInterval(syncProgress, 15000);
 
   // Global listeners
   document.getElementById('detail-overlay').addEventListener('click', e => {

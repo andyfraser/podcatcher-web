@@ -23,6 +23,21 @@
   --gutter:    24px;
 }
 
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg:        #f4f5f7;
+    --bg2:       #ffffff;
+    --bg3:       #ebedf0;
+    --bg4:       #dfe1e6;
+    --border:    #d0d4da;
+    --border2:   #c1c7d0;
+    --text:      #172b4d;
+    --text2:     #42526e;
+    --muted:     #6b778c;
+    --amber-dim: #f5a623;
+  }
+}
+
 html { scroll-behavior: smooth; }
 
 body {
@@ -333,9 +348,9 @@ td.actions { white-space: nowrap; text-align: right; }
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 48px;
+  min-height: 48px;
   border-bottom: 1px solid var(--border);
-  overflow: hidden;
+  padding: 4px 0;
 }
 .episode-row:last-child { border-bottom: none; }
 .ep-num   { color: var(--muted); font-size: 12px; width: 26px; flex-shrink: 0; padding-top: 1px; }
@@ -349,6 +364,21 @@ td.actions { white-space: nowrap; text-align: right; }
 .ep-meta  { flex: 1; min-width: 0; font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ep-actions { flex-shrink: 0; display: flex; gap: 4px; align-items: center; }
 .ep-mark-btn { width: 110px; text-align: center; }
+
+/* ── Progress Bar ── */
+.ep-progress-bar {
+  height: 2px;
+  background: var(--bg4);
+  margin-top: 4px;
+  border-radius: 1px;
+  overflow: hidden;
+  width: 100%;
+}
+.ep-progress-fill {
+  height: 100%;
+  background: var(--amber);
+  transition: width 0.3s;
+}
 
 /* ── Status badges ── */
 .badge {
@@ -698,5 +728,15 @@ td.actions { white-space: nowrap; text-align: right; }
 @media (max-width: 680px) {
   .sidebar { display: none; }
   .main { padding: 16px; }
-  #player-bar { left: 0; }
+  #player-bar { 
+    left: 0; 
+    flex-direction: column; 
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px 16px;
+  }
+  #player-title { max-width: none; }
+  .player-btns { justify-content: space-between; }
+  .btn-player { padding: 4px 10px; font-size: 11px; }
+  #player-close { position: absolute; top: 8px; right: 8px; }
 }

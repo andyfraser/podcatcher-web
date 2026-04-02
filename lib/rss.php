@@ -73,6 +73,15 @@ function parse_episode(SimpleXMLElement $item): ?array {
     $itunes   = $item->children($ns_itunes);
     $duration = $itunes ? (string)($itunes->duration ?? '') : '';
 
+    // Convert HH:MM:SS or MM:SS to seconds
+    $duration_seconds = 0;
+    if ($duration) {
+        $parts = array_reverse(explode(':', $duration));
+        if (count($parts) >= 1) $duration_seconds += (int)$parts[0]; // seconds
+        if (count($parts) >= 2) $duration_seconds += (int)$parts[1] * 60; // minutes
+        if (count($parts) >= 3) $duration_seconds += (int)$parts[2] * 3600; // hours
+    }
+
     $audio_url = '';
     $file_size = 0;
     $mime_type = '';
@@ -89,10 +98,11 @@ function parse_episode(SimpleXMLElement $item): ?array {
         'title'       => $title,
         'pub_date'    => $pub_date,
         'guid'        => $guid ?: $audio_url,
-        'audio_url'   => $audio_url,
-        'file_size'   => $file_size,
-        'mime_type'   => $mime_type,
-        'duration'    => $duration,
-        'description' => trim(strip_tags($description, '<p><br><a><strong><b><em><i><ul><ol><li><h1><h2><h3><h4><blockquote>')),
+        'audio_url'        => $audio_url,
+        'file_size'        => $file_size,
+        'mime_type'        => $mime_type,
+        'duration'         => $duration,
+        'duration_seconds' => $duration_seconds,
+        'description'      => trim(strip_tags($description, '<p><br><a><strong><b><em><i><ul><ol><li><h1><h2><h3><h4><blockquote>')),
     ];
 }
