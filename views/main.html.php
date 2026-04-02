@@ -49,6 +49,9 @@
       <a href="#" class="nav-link" data-tab="tab-remove">
         <span class="icon">✕</span> Remove
       </a>
+      <a href="#" class="nav-link" data-tab="tab-settings">
+        <span class="icon">⚙</span> Settings
+      </a>
     </nav>
     <div class="sidebar-footer">
       <div class="sidebar-footer-text">
@@ -328,6 +331,26 @@
         </div>
       </div>
       <div id="discover-results" class="discover-grid"></div>
+    </div>
+
+    <div id="tab-settings" class="tab-content">
+      <div class="page-header">
+        <div class="page-title"><span>$</span> podcatcher settings</div>
+        <div class="page-subtitle">Configure application preferences</div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Appearance</div>
+        <div class="form-row">
+          <div class="form-group" style="max-width:300px">
+            <label>Color Theme</label>
+            <select id="setting-theme" onchange="changeTheme(this.value)">
+              <option value="auto">Automatic (System Preference)</option>
+              <option value="light">Light Mode</option>
+              <option value="dark">Dark Mode</option>
+            </select>
+          </div>
+        </div>
+      </div>
     </div>
 
   </main>

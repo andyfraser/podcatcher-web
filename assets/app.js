@@ -8,6 +8,7 @@ let state = {
   searchResults: {},
   discoverQuery: '',
   discoverResults: [],
+  theme: localStorage.getItem('podcatcher-theme') || 'auto',
   player: {
     open: false,
     slug: null,
@@ -34,6 +35,14 @@ function render() {
   renderPlayer();
   renderDownloads();
   updateSidebarCounts();
+  applyTheme();
+}
+
+function applyTheme() {
+  const theme = state.theme;
+  document.documentElement.dataset.theme = theme;
+  const select = document.getElementById('setting-theme');
+  if (select) select.value = theme;
 }
 
 function renderTabs() {
@@ -410,6 +419,11 @@ function addFromDiscover(url) {
   setState({ activeTab: 'tab-add' });
   document.getElementById('add-name').focus();
   toast('Feed URL copied to Add tab', 'info');
+}
+
+function changeTheme(theme) {
+  localStorage.setItem('podcatcher-theme', theme);
+  setState({ theme });
 }
 
 // ── Audio Player ─────────────────────────────────────────────────────────────
