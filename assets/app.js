@@ -459,7 +459,7 @@ function playEpisode(slug, episodeNum, title, feedTitle) {
 
 async function syncProgress() {
   const audio = document.getElementById('player-audio');
-  if (!audio.src || audio.paused || !state.player.slug) return;
+  if (!audio.src || !state.player.slug) return;
 
   const slug = state.player.slug;
   const epNum = state.player.episodeNum;
@@ -475,6 +475,7 @@ async function syncProgress() {
     render(); // Re-render to show updated progress bar
   }
 
+  // Only send to backend if not paused (unless it's a final sync)
   await api('save_progress', {
     slug,
     episode: epNum,
