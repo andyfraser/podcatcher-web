@@ -1,259 +1,509 @@
-// ── Tab navigation ──────────────────────────────────────────────────────────
-const tabs = document.querySelectorAll('.nav-link');
-tabs.forEach(a => {
+// ── State Management ────────────────────────────────────────────────────────
+let state = {
+  feeds: {},
+  activeTab: 'tab-list',
+  statusSlug: null,
+  statusCount: 10,
+  searchQuery: '',
+  searchResults: {},
+  discoverQuery: '',
+  discoverResults: [],
+  player: {
+    open: false,
+    slug: null,
+    episodeNum: null,
+    title: '',
+    feedTitle: '',
+    speed: 1.0
+  },
+  downloads: [] // { slug, epNum, title, pct, mbDone, mbTotal, status, done, error, path }
+};
+
+function setState(patch) {
+  state = { ...state, ...patch };
+  render();
+}
+
+// ── Rendering Engine ────────────────────────────────────────────────────────
+function render() {
+  renderTabs();
+  renderFeedList();
+  renderStatus();
+  renderSearch();
+  renderDiscover();
+  renderPlayer();
+  renderDownloads();
+  updateSidebarCounts();
+}
+
+function renderTabs() {
+  const navLinks = document.querySelectorAll('.nav-link');
+  navLinks.forEach(a => {
+    if (a.dataset.tab === state.activeTab) a.classList.add('active');
+    else a.classList.remove('active');
+  });
+
+  document.querySelectorAll('.tab-content').forEach(t => {
+    if (t.id === state.activeTab) t.classList.add('active');
+    else t.classList.remove('active');
+  });
+}
+
+function renderFeedList() {
+  const tbody  = document.querySelector('#tab-list tbody');
+  const header = document.querySelector('#tab-list .page-subtitle');
+  if (!tbody) return;
+
+  const feedArray = Object.entries(state.feeds);
+  if (header) header.textContent = feedArray.length + ' feed(s) subscribed';
+
+  if (!feedArray.length) {
+    const listPanel = tbody.closest('.panel');
+    if (listPanel) listPanel.innerHTML = '<div class="empty" style="padding:20px">No feeds yet. Use <strong>Add Feed</strong> to subscribe to a podcast.</div>';
+    return;
+  }
+
+  const sorted = feedArray.sort(([, a], [, b]) =>
+    (a.meta.title || '').localeCompare(b.meta.title || '', undefined, { sensitivity: 'base' }));
+
+  let html = '';
+  for (const [slug, feed] of sorted) {
+    html += `
+      <tr>
+        <td class="title">${escHtml(feed.meta.title)}</td>
+        <td class="num">${(feed.episodes || []).length}</td>
+        <td class="date">${escHtml(fmtDate(feed.last_updated))}</td>
+        <td class="slug">${escHtml(slug)}</td>
+        <td class="actions">
+          <button class="btn btn-ghost btn-sm" onclick="openStatus('${escHtml(slug)}')">status</button>
+        </td>
+      </tr>`;
+  }
+  tbody.innerHTML = html;
+}
+
+function renderStatus() {
+  const panel = document.getElementById('status-panel');
+  if (!panel) return;
+
+  const slug = state.statusSlug;
+  const feed = state.feeds[slug];
+
+  if (!slug) { panel.innerHTML = ''; return; }
+  if (!feed) { panel.innerHTML = '<div class="empty">Feed not found.</div>'; return; }
+
+  const meta     = feed.meta;
+  const episodes = feed.episodes || [];
+  const played   = episodes.filter(e => e.played).length;
+  const count    = state.statusCount === 0 ? episodes.length : state.statusCount;
+  const shown    = episodes.slice(0, count);
+
+  let html = `
+    <div class="panel">
+      <div class="panel-title">${escHtml(meta.title)}</div>
+      <div class="meta-grid">
+        <span class="meta-key">Slug</span>      <span class="meta-val text-amber">${escHtml(slug)}</span>
+        <span class="meta-key">URL</span>       <span class="meta-val"><a href="${escHtml(feed.url)}" target="_blank" style="color:var(--blue)">${escHtml(feed.url)}</a></span>
+        <span class="meta-key">Added</span>     <span class="meta-val">${escHtml((feed.added || '').substring(0, 19))}</span>
+        <span class="meta-key">Updated</span>   <span class="meta-val">${escHtml((feed.last_updated || '').substring(0, 19))}</span>
+        <span class="meta-key">Episodes</span>  <span class="meta-val">${episodes.length}</span>
+        <span class="meta-key">Played</span>    <span class="meta-val">${played} / ${episodes.length}</span>
+      </div>
+      ${meta.description ? descriptionHtml(meta.description) : ''}
+      <div class="panel-title" style="margin-top:4px">Latest ${shown.length} Episode(s)</div>`;
+
+  if (!shown.length) {
+    html += '<div class="empty">No episodes.</div>';
+  } else {
+    shown.forEach((ep, i) => {
+      const epNum = i + 1;
+      const pub   = ep.pub_date ? ep.pub_date.substring(0, 16) : '';
+      const dur   = ep.duration ? ` · ${ep.duration}` : '';
+      const mb    = ep.file_size > 0 ? ` · ${(ep.file_size / 1048576).toFixed(1)} MB` : '';
+
+      html += `
+        <div class="episode-row">
+          <div class="ep-num">${epNum}.</div>
+          <div class="ep-body">
+            <div class="ep-title-row">
+              <span class="ep-glyph played${ep.played ? ' on' : ''}" title="${ep.played ? 'Played' : ''}">✔</span>
+              <span class="ep-title">${escHtml(ep.title)}</span>
+            </div>
+            <div class="ep-meta-row">
+              <span class="ep-glyph dl${ep.local_path ? ' on' : ''}" title="${ep.local_path ? 'Downloaded' : ''}">⬇</span>
+              <span class="ep-meta">${escHtml(pub)}${escHtml(dur)}${mb}</span>
+            </div>
+          </div>
+          <div class="ep-actions">
+            ${ep.local_path
+              ? `<button class="btn btn-ghost btn-sm" onclick="playEpisode('${escHtml(slug)}', ${epNum}, '${escJs(ep.title)}', '${escJs(meta.title)}')" title="Play">▶ Play</button>`
+              : `<button class="btn btn-ghost btn-sm" onclick="startDownloadFromStatus('${escHtml(slug)}', ${epNum}, '${escJs(ep.title)}', '${escJs(meta.title)}')" title="Download">⬇</button>`
+            }
+            <button class="btn btn-ghost btn-sm ep-mark-btn" onclick="quickMark('${escHtml(slug)}', ${epNum}, ${ep.played})">
+              ${ep.played ? 'mark unplayed' : 'mark played'}
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="showEpisodeDetail('${escHtml(slug)}', ${epNum})" title="View details">…</button>
+          </div>
+        </div>`;
+    });
+  }
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
+function renderSearch() {
+  const container = document.getElementById('search-results');
+  if (!container) return;
+
+  const results = state.searchResults;
+  if (!state.searchQuery) { container.innerHTML = ''; return; }
+
+  if (Object.keys(results).length === 0) {
+    container.innerHTML = `<div class="empty">No episodes matched "<strong>${escHtml(state.searchQuery)}</strong>".</div>`;
+    return;
+  }
+
+  let html = '';
+  for (const [slug, group] of Object.entries(results)) {
+    html += `
+      <div class="search-group">
+        <div class="search-group-title">[${escHtml(slug)}] ${escHtml(group.title)}</div>`;
+    for (const ep of group.episodes) {
+      html += `
+        <div class="search-ep" onclick="showEpisodeDetail('${escHtml(slug)}', ${ep.ep_num})">
+          <div class="search-ep-title">${escHtml(ep.title)}</div>
+          <div class="search-ep-date">${escHtml(ep.pub_date ? ep.pub_date.substring(0, 16) : '')}</div>
+        </div>`;
+    }
+    html += '</div>';
+  }
+  container.innerHTML = html;
+}
+
+function renderDiscover() {
+  const container = document.getElementById('discover-results');
+  if (!container) return;
+
+  if (!state.discoverQuery) { container.innerHTML = ''; return; }
+  const results = state.discoverResults;
+
+  if (results.length === 0) {
+    container.innerHTML = `<div class="empty">No podcasts found for "<strong>${escHtml(state.discoverQuery)}</strong>".</div>`;
+    return;
+  }
+
+  let html = '';
+  results.forEach(res => {
+    html += `
+      <div class="discover-card">
+        <img src="${escHtml(res.image)}" alt="Artwork" class="discover-img">
+        <div class="discover-body">
+          <div class="discover-title" title="${escHtml(res.title)}">${escHtml(res.title)}</div>
+          <div class="discover-author">${escHtml(res.author)}</div>
+          <div class="discover-genres">${escHtml(res.genres.slice(0, 2).join(', '))}</div>
+          <button class="btn btn-primary btn-sm mt8" onclick="addFromDiscover('${escHtml(res.url)}')">+ Add</button>
+        </div>
+      </div>`;
+  });
+  container.innerHTML = html;
+}
+
+function renderPlayer() {
+  const bar = document.getElementById('player-bar');
+  const et  = document.getElementById('player-ep-title');
+  const ft  = document.getElementById('player-feed-title');
+  const sp  = document.getElementById('player-speed');
+
+  if (state.player.open) {
+    bar.classList.add('open');
+    et.textContent = state.player.title;
+    ft.textContent = state.player.feedTitle;
+    sp.value = state.player.speed;
+    document.querySelector('.main').style.paddingBottom = '84px';
+  } else {
+    bar.classList.remove('open');
+    document.querySelector('.main').style.paddingBottom = '';
+  }
+}
+
+function renderDownloads() {
+  const container = document.getElementById('dl-progress-list');
+  if (!container) return;
+
+  if (state.downloads.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  let html = '';
+  state.downloads.forEach(dl => {
+    const id = `dl-item-${dl.slug}-${dl.epNum}`;
+    const statusText = dl.error
+      ? `✗ ${dl.error}`
+      : dl.done
+        ? `✔ Saved — <span class="text-muted">${escHtml(dl.path)}</span>`
+        : dl.mbTotal
+          ? `${dl.mbDone} / ${dl.mbTotal} MB ${dl.pct >= 0 ? ' · ' + dl.pct + '%' : ''}`
+          : `${dl.mbDone} MB downloaded…`;
+
+    html += `
+      <div class="dl-item ${dl.done ? 'done' : ''} ${dl.error ? 'error' : ''}" id="${id}">
+        <div class="dl-item-title">${escHtml(dl.title)}</div>
+        <div class="dl-item-bar-wrap">
+          <div class="dl-item-bar ${!dl.done && !dl.error && dl.pct < 0 ? 'indeterminate' : ''}"
+               style="width: ${dl.pct >= 0 ? dl.pct : (dl.done ? 100 : 30)}%"></div>
+        </div>
+        <div class="dl-item-status">
+          ${statusText}
+          ${dl.done ? `<button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="playEpisode('${escHtml(dl.slug)}', ${dl.epNum}, '${escJs(dl.title)}', '${escJs(dl.feedTitle)}')">▶ Play</button>` : ''}
+        </div>
+      </div>`;
+  });
+  container.innerHTML = html;
+}
+
+function updateSidebarCounts() {
+  // Option to add unplayed counts next to feed names in the sidebar could go here
+}
+
+// ── Event Handlers ──────────────────────────────────────────────────────────
+document.querySelectorAll('.nav-link').forEach(a => {
   a.addEventListener('click', e => {
     e.preventDefault();
-    tabs.forEach(x => x.classList.remove('active'));
-    a.classList.add('active');
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.getElementById(a.dataset.tab).classList.add('active');
-    if (a.dataset.tab === 'tab-list') refreshPage();
-    if (a.dataset.tab === 'tab-update') document.getElementById('update-result').innerHTML = '';
+    const tabId = a.dataset.tab;
+    setState({ activeTab: tabId });
+    if (tabId === 'tab-list') refreshData();
   });
 });
 
-// ── Toast ───────────────────────────────────────────────────────────────────
-function toast(msg, type = 'success') {
-  const c    = document.getElementById('toast-container');
-  const t    = document.createElement('div');
-  const icon = { success: '✔', error: '✗', info: 'ℹ' }[type] || '•';
-  t.className = `toast ${type}`;
-  t.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
-  c.appendChild(t);
-  setTimeout(() => {
-    t.classList.add('fade-out');
-    setTimeout(() => t.remove(), 400);
-  }, 4000);
-}
-
-// ── Confirm dialog ──────────────────────────────────────────────────────────
-let confirmCallback = null;
-
-function showConfirm(title, msg, cb) {
-  document.getElementById('confirm-title').textContent = title;
-  document.getElementById('confirm-msg').textContent   = msg;
-  confirmCallback = cb;
-  document.getElementById('confirm-overlay').classList.add('open');
-}
-
-function closeConfirm() {
-  document.getElementById('confirm-overlay').classList.remove('open');
-  confirmCallback = null;
-}
-
-document.getElementById('confirm-ok').addEventListener('click', () => {
-  const cb = confirmCallback;
-  closeConfirm();
-  if (cb) cb();
-});
-
-document.getElementById('confirm-overlay').addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeConfirm();
-});
-
-document.querySelector('#confirm-overlay .dialog').addEventListener('click', e => {
-  e.stopPropagation();
-});
-
-// ── API helper ──────────────────────────────────────────────────────────────
-async function api(action, params = {}) {
-  const body = new FormData();
-  body.append('action', action);
-  for (const [k, v] of Object.entries(params)) body.append(k, v);
-  try {
-    const r = await fetch(location.pathname, {
-      method:  'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      body,
-    });
-    const text = await r.text();
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      console.error('Non-JSON response for action=' + action + ':', text);
-      return { error: 'Server returned an unexpected response. Check console for details.' };
-    }
-  } catch (e) {
-    console.error('Fetch failed for action=' + action + ':', e);
-    return { error: 'Request failed: ' + e.message };
+async function refreshData() {
+  const data = await api('get_feeds');
+  if (data.feeds) {
+    setState({ feeds: data.feeds });
+    updateSelectOptions();
   }
 }
 
-function setResult(id, data) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  if (data.success) {
-    el.innerHTML = `<span class="text-green">✔ </span>${data.success}`;
-    toast(data.success.replace(/<[^>]+>/g, ''), 'success');
-  } else if (data.error) {
-    el.innerHTML = `<span class="text-red">✗ </span>${data.error}`;
-    toast(data.error, 'error');
-  } else if (data.info) {
-    el.innerHTML = `<span class="text-amber">ℹ </span>${data.info}`;
-    toast(data.info.replace(/<[^>]+>/g, ''), 'info');
+function updateSelectOptions() {
+  const feeds = state.feeds;
+  const makeOpts = (includeBlank, blankLabel) => {
+    let h = includeBlank ? `<option value="">${blankLabel}</option>` : '';
+    const sorted = Object.entries(feeds).sort(([, a], [, b]) =>
+      (a.meta.title || '').localeCompare(b.meta.title || '', undefined, { sensitivity: 'base' }));
+    for (const [s, f] of sorted)
+      h += `<option value="${escHtml(s)}">${escHtml(s)} — ${escHtml(f.meta.title)}</option>`;
+    return h;
+  };
+
+  const updateSlug = document.getElementById('update-slug');
+  if (updateSlug) updateSlug.innerHTML = makeOpts(true, '— All Feeds —');
+
+  const dlSlug = document.getElementById('dl-slug');
+  if (dlSlug) dlSlug.innerHTML = makeOpts(true, '— All Feeds —');
+
+  const statusSlug = document.getElementById('status-slug');
+  if (statusSlug) {
+    const current = statusSlug.value;
+    statusSlug.innerHTML = makeOpts(true, '— Choose a feed —');
+    statusSlug.value = current;
   }
-  el.style.display = 'block';
+
+  const markSlug = document.getElementById('mark-slug');
+  if (markSlug) markSlug.innerHTML = makeOpts(true, '— Choose a feed —');
+
+  const removeSlug = document.getElementById('remove-slug');
+  if (removeSlug) removeSlug.innerHTML = makeOpts(true, '— Choose a feed —');
 }
 
-// ── Add ─────────────────────────────────────────────────────────────────────
+// ── API Actions ─────────────────────────────────────────────────────────────
 async function doAdd() {
   const url  = document.getElementById('add-url').value.trim();
   const name = document.getElementById('add-name').value.trim();
   if (!url) { toast('Please enter a feed URL', 'error'); return; }
+
   const btn = document.getElementById('btn-add');
-  btn.disabled  = true;
+  btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Fetching…';
-  const data    = await api('add', { url, name });
-  btn.disabled  = false;
+
+  const data = await api('add', { url, name });
+  btn.disabled = false;
   btn.innerHTML = 'Add Feed';
-  setResult('add-result', data);
+
   if (data.success) {
-    document.getElementById('add-url').value  = '';
+    document.getElementById('add-url').value = '';
     document.getElementById('add-name').value = '';
-    refreshSelects();
+    toast(data.success.replace(/<[^>]+>/g, ''), 'success');
+    await refreshData();
+  } else {
+    toast(data.error || 'Failed to add feed', 'error');
   }
 }
 
-// ── Update ──────────────────────────────────────────────────────────────────
 async function doUpdate() {
-  const slug    = document.getElementById('update-slug').value;
-  const autoDl  = document.getElementById('update-auto-dl').checked;
-  const btn     = document.getElementById('btn-update');
-  btn.disabled  = true;
-  btn.innerHTML = '<span class="spinner"></span> Updating…';
-  const data    = await api('update', { slug });
-  btn.disabled  = false;
-  btn.innerHTML = '↻ Update';
-  setResult('update-result', data);
+  const slug   = document.getElementById('update-slug').value;
+  const autoDl = document.getElementById('update-auto-dl').checked;
+  const btn    = document.getElementById('btn-update');
 
-  const newEps = data.new_episodes || [];
-  if (autoDl && newEps.length) {
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.nav-link').forEach(a => a.classList.remove('active'));
-    document.getElementById('tab-download').classList.add('active');
-    document.querySelector('[data-tab="tab-download"]').classList.add('active');
-    toast(`Downloading ${newEps.length} new episode(s)…`, 'info');
-    for (const ep of newEps) {
-      sseDownloadOne(ep.slug, ep.ep_num, ep.title, ep.feed_title);
-      await new Promise(r => setTimeout(r, 200));
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Updating…';
+  const data = await api('update', { slug });
+  btn.disabled = false;
+  btn.innerHTML = '↻ Update';
+
+  if (data.error) {
+    toast(data.error, 'error');
+  } else {
+    toast('Feeds updated successfully', 'success');
+    await refreshData();
+
+    const newEps = data.new_episodes || [];
+    if (autoDl && newEps.length) {
+      setState({ activeTab: 'tab-download' });
+      toast(`Downloading ${newEps.length} new episode(s)…`, 'info');
+      for (const ep of newEps) {
+        sseDownloadOne(ep.slug, ep.ep_num, ep.title, ep.feed_title);
+        await new Promise(r => setTimeout(r, 200));
+      }
     }
   }
 }
 
-// ── Remove ──────────────────────────────────────────────────────────────────
-function confirmRemove() {
-  const slug = document.getElementById('remove-slug').value;
-  if (!slug) { toast('Select a feed to remove', 'error'); return; }
-  showConfirm('Remove Feed', `Remove "${slug}"? This cannot be undone.`, async () => {
-    const data = await api('remove', { slug });
-    setResult('remove-result', data);
-    if (data.success) refreshSelects();
-  });
-}
+async function doSearch() {
+  const query = document.getElementById('search-query').value.trim();
+  const limit = document.getElementById('search-limit').value;
+  if (!query) { toast('Enter a search term', 'error'); return; }
 
-// ── Mark Played ─────────────────────────────────────────────────────────────
-async function doMark(unplayed) {
-  const slug    = document.getElementById('mark-slug').value;
-  const episode = document.getElementById('mark-episode').value;
-  if (!slug) { toast('Select a feed first', 'error'); return; }
-  const label   = unplayed ? 'unplayed' : 'played';
-  const runMark = async () => {
-    const data = await api('mark_played', { slug, episode, unplayed: unplayed ? '1' : '0' });
-    setResult('mark-result', data);
-    if (data.success && document.getElementById('status-slug').value === slug) loadStatus();
-  };
-  if (!episode) {
-    showConfirm('Mark All Episodes', `Mark all episodes of "${slug}" as ${label}?`, runMark);
+  const data = await api('search', { query, limit });
+  if (data.error) {
+    toast(data.error, 'error');
   } else {
-    await runMark();
+    setState({ searchQuery: query, searchResults: data.results || {} });
   }
 }
 
-// ── Download with SSE progress ───────────────────────────────────────────────
-async function populateDlEpisodes() {
-  const slug = document.getElementById('dl-slug').value;
-  const sel  = document.getElementById('dl-episode-select');
-  sel.innerHTML = '<option value="">— All undownloaded —</option>';
-  if (!slug) return;
-  const data = await api('get_feeds');
-  const feed = (data.feeds || {})[slug];
-  if (!feed) return;
-  feed.episodes.forEach((ep, i) => {
-    const opt = document.createElement('option');
-    opt.value = i + 1;
-    const dl  = ep.local_path ? ' ⬇' : '';
-    opt.textContent = `${i + 1}. ${ep.title.substring(0, 55)}${dl}`;
-    sel.appendChild(opt);
-  });
+async function doDiscover() {
+  const query = document.getElementById('discover-query').value.trim();
+  if (!query) { toast('Enter a podcast name or topic', 'error'); return; }
+
+  const container = document.getElementById('discover-results');
+  container.innerHTML = '<div class="empty"><span class="spinner"></span> Searching iTunes...</div>';
+
+  const data = await api('discover', { query });
+  if (data.error) {
+    toast(data.error, 'error');
+    setState({ discoverQuery: query, discoverResults: [] });
+  } else {
+    setState({ discoverQuery: query, discoverResults: data.results || [] });
+  }
 }
 
-function sseDownloadOne(slug, episodeNum, titleText, feedTitle) {
-  const list = document.getElementById('dl-progress-list');
-  const id   = `dl-item-${slug}-${episodeNum}`;
+function addFromDiscover(url) {
+  document.getElementById('add-url').value = url;
+  setState({ activeTab: 'tab-add' });
+  document.getElementById('add-name').focus();
+  toast('Feed URL copied to Add tab', 'info');
+}
 
-  document.getElementById(id)?.remove();
+// ── Audio Player ─────────────────────────────────────────────────────────────
+function playEpisode(slug, episodeNum, title, feedTitle) {
+  const audio = document.getElementById('player-audio');
+  const src = `?action=stream&slug=${encodeURIComponent(slug)}&episode=${episodeNum}`;
 
-  const item = document.createElement('div');
-  item.className = 'dl-item';
-  item.id = id;
-  item.innerHTML = `
-    <div class="dl-item-title">${escHtml(titleText)}</div>
-    <div class="dl-item-bar-wrap"><div class="dl-item-bar indeterminate" id="${id}-bar"></div></div>
-    <div class="dl-item-status" id="${id}-status">Connecting…</div>`;
-  list.prepend(item);
+  setState({
+    player: {
+      ...state.player,
+      open: true,
+      slug,
+      episodeNum,
+      title,
+      feedTitle
+    }
+  });
 
-  const url = `?action=sse_download&slug=${encodeURIComponent(slug)}&episode=${episodeNum}`;
-  const es  = new EventSource(url);
+  audio.src = src;
+  audio.playbackRate = state.player.speed;
+  audio.play().catch(() => {});
+}
+
+function closePlayer() {
+  const audio = document.getElementById('player-audio');
+  audio.pause();
+  audio.src = '';
+  setState({ player: { ...state.player, open: false } });
+}
+
+function skipPlayer(seconds) {
+  const audio = document.getElementById('player-audio');
+  if (!audio.src) return;
+  audio.currentTime += seconds;
+}
+
+function setPlayerSpeed(rate) {
+  const audio = document.getElementById('player-audio');
+  const speed = parseFloat(rate);
+  setState({ player: { ...state.player, speed } });
+  if (audio.src) audio.playbackRate = speed;
+}
+
+// ── Downloads ───────────────────────────────────────────────────────────────
+function sseDownloadOne(slug, epNum, title, feedTitle) {
+  // Initialize download in state
+  const downloads = [...state.downloads];
+  const existingIdx = downloads.findIndex(d => d.slug === slug && d.epNum === epNum);
+  const newDl = {
+    slug, epNum, title, feedTitle,
+    pct: -1, mbDone: 0, mbTotal: null,
+    status: 'Connecting…', done: false, error: null
+  };
+
+  if (existingIdx >= 0) downloads[existingIdx] = newDl;
+  else downloads.unshift(newDl);
+
+  setState({ downloads });
+
+  const url = `?action=sse_download&slug=${encodeURIComponent(slug)}&episode=${epNum}`;
+  const es = new EventSource(url);
 
   es.onmessage = (e) => {
-    const d   = JSON.parse(e.data);
-    const bar = document.getElementById(`${id}-bar`);
-    const st  = document.getElementById(`${id}-status`);
+    const d = JSON.parse(e.data);
+    const curDownloads = [...state.downloads];
+    const idx = curDownloads.findIndex(dl => dl.slug === slug && dl.epNum === epNum);
+    if (idx === -1) return;
 
     if (d.error) {
       es.close();
-      item.classList.add('error');
-      bar.classList.remove('indeterminate');
-      bar.style.width = '100%';
-      st.textContent  = '✗ ' + d.error;
+      curDownloads[idx] = { ...curDownloads[idx], error: d.error, status: '✗ ' + d.error };
+      setState({ downloads: curDownloads });
       toast(`Download failed: ${d.error}`, 'error');
       return;
     }
 
-    if (d.pct >= 0) {
-      bar.classList.remove('indeterminate');
-      bar.style.width = d.pct + '%';
-    }
-
-    if (d.mb_total) {
-      st.textContent = `${d.mb_done} / ${d.mb_total} MB${d.pct >= 0 ? '  ' + d.pct + '%' : ''}`;
-    } else {
-      st.textContent = `${d.mb_done} MB downloaded…`;
-    }
+    curDownloads[idx] = {
+      ...curDownloads[idx],
+      pct: d.pct ?? curDownloads[idx].pct,
+      mbDone: d.mb_done ?? curDownloads[idx].mbDone,
+      mbTotal: d.mb_total ?? curDownloads[idx].mbTotal,
+      done: !!d.done,
+      path: d.path ?? curDownloads[idx].path
+    };
 
     if (d.done) {
       es.close();
-      item.classList.add('done');
-      const already = d.already ? ' (already had it)' : '';
-      st.innerHTML = `✔ Saved — <span class="text-muted">${escHtml(d.path)}</span>${already}`;
-      const playBtn = document.createElement('button');
-      playBtn.className = 'btn btn-ghost btn-sm';
-      playBtn.style.marginLeft = '8px';
-      playBtn.textContent = '▶ Play';
-      playBtn.addEventListener('click', () => playEpisode(slug, episodeNum, titleText, feedTitle));
-      st.appendChild(playBtn);
-      toast(`Downloaded: ${titleText.substring(0, 50)}`, 'success');
-      _statusCache = null;
-      if (document.getElementById('status-slug').value === slug) loadStatus(true);
+      setState({ downloads: curDownloads });
+      toast(`Downloaded: ${title.substring(0, 50)}`, 'success');
+      refreshData(); // Refresh to update "Downloaded" status in episode lists
+    } else {
+      setState({ downloads: curDownloads });
     }
   };
 
   es.onerror = () => {
     es.close();
-    const st = document.getElementById(`${id}-status`);
-    if (st && !item.classList.contains('done') && !item.classList.contains('error')) {
-      item.classList.add('error');
-      st.textContent = '✗ Connection lost';
+    const curDownloads = [...state.downloads];
+    const idx = curDownloads.findIndex(dl => dl.slug === slug && dl.epNum === epNum);
+    if (idx !== -1 && !curDownloads[idx].done && !curDownloads[idx].error) {
+      curDownloads[idx] = { ...curDownloads[idx], error: 'Connection lost', status: '✗ Connection lost' };
+      setState({ downloads: curDownloads });
     }
   };
 }
@@ -261,24 +511,19 @@ function sseDownloadOne(slug, episodeNum, titleText, feedTitle) {
 async function doDownload(all) {
   const slug  = document.getElementById('dl-slug').value;
   const epVal = document.getElementById('dl-episode-select').value;
-  const data  = await api('get_feeds');
-  const feeds = data.feeds || {};
+  const feeds = state.feeds;
 
   let queue = [];
-
   if (epVal) {
     if (!slug) { toast('Select a feed first', 'error'); return; }
     const feed = feeds[slug];
-    if (!feed) return;
     const ep = feed.episodes[parseInt(epVal) - 1];
     if (ep) queue.push({ slug, episode: parseInt(epVal), title: ep.title, feedTitle: feed.meta.title });
   } else {
     const targets = slug ? { [slug]: feeds[slug] } : feeds;
     for (const [s, feed] of Object.entries(targets)) {
-      if (!feed) continue;
       feed.episodes.forEach((ep, i) => {
-        const hasFile = ep.local_path && ep.local_path !== '';
-        if (all || !hasFile) {
+        if (all || !ep.local_path) {
           queue.push({ slug: s, episode: i + 1, title: ep.title, feedTitle: feed.meta.title });
         }
       });
@@ -294,10 +539,87 @@ async function doDownload(all) {
   }
 }
 
-// ── Episode Detail Overlay ───────────────────────────────────────────────────
-function showEpisodeDetail(slug, epNum, ep, feedTitle) {
-  document.getElementById('detail-feed-name').textContent = feedTitle + '  [' + slug + ']';
-  document.getElementById('detail-ep-title').textContent  = ep.title;
+// ── Helpers & Utils ──────────────────────────────────────────────────────────
+function openStatus(slug) {
+  setState({ activeTab: 'tab-status', statusSlug: slug });
+}
+
+function loadStatus() {
+  const slug = document.getElementById('status-slug').value;
+  const count = parseInt(document.getElementById('status-count').value) || 10;
+  setState({ statusSlug: slug, statusCount: count });
+}
+
+async function quickMark(slug, episode, wasPlayed) {
+  const data = await api('mark_played', { slug, episode, unplayed: wasPlayed ? '1' : '0' });
+  if (data.success) {
+    toast(`Episode ${episode} marked ${wasPlayed ? 'unplayed' : 'played'}`, 'success');
+    await refreshData();
+  }
+}
+
+async function doMark(unplayed) {
+  const slug = document.getElementById('mark-slug').value;
+  const episode = document.getElementById('mark-episode').value;
+  if (!slug) { toast('Select a feed first', 'error'); return; }
+
+  const runMark = async () => {
+    const data = await api('mark_played', { slug, episode, unplayed: unplayed ? '1' : '0' });
+    if (data.success) {
+      toast(data.success, 'success');
+      await refreshData();
+    }
+  };
+
+  if (!episode) {
+    showConfirm('Mark All Episodes', `Mark all episodes of "${slug}" as ${unplayed ? 'unplayed' : 'played'}?`, runMark);
+  } else {
+    await runMark();
+  }
+}
+
+async function populateDlEpisodes() {
+  const slug = document.getElementById('dl-slug').value;
+  const sel  = document.getElementById('dl-episode-select');
+  sel.innerHTML = '<option value="">— All undownloaded —</option>';
+  if (!slug) return;
+
+  const feed = state.feeds[slug];
+  if (!feed) return;
+  feed.episodes.forEach((ep, i) => {
+    const opt = document.createElement('option');
+    opt.value = i + 1;
+    const dl  = ep.local_path ? ' ⬇' : '';
+    opt.textContent = `${i + 1}. ${ep.title.substring(0, 55)}${dl}`;
+    sel.appendChild(opt);
+  });
+}
+
+function startDownloadFromStatus(slug, epNum, title, feedTitle) {
+  setState({ activeTab: 'tab-download' });
+  sseDownloadOne(slug, epNum, title, feedTitle);
+}
+
+function confirmRemove() {
+  const slug = document.getElementById('remove-slug').value;
+  if (!slug) { toast('Select a feed to remove', 'error'); return; }
+  showConfirm('Remove Feed', `Remove "${slug}"? This cannot be undone.`, async () => {
+    const data = await api('remove', { slug });
+    if (data.success) {
+      toast(data.success.replace(/<[^>]+>/g, ''), 'success');
+      await refreshData();
+    }
+  });
+}
+
+function showEpisodeDetail(slug, epNum) {
+  const feed = state.feeds[slug];
+  if (!feed) return;
+  const ep = feed.episodes[epNum - 1];
+  if (!ep) return;
+
+  document.getElementById('detail-feed-name').textContent = feed.meta.title + ' [' + slug + ']';
+  document.getElementById('detail-ep-title').textContent = ep.title;
 
   const metaEl = document.getElementById('detail-meta');
   metaEl.innerHTML = '';
@@ -307,11 +629,12 @@ function showEpisodeDetail(slug, epNum, ep, feedTitle) {
     if (cls) s.className = cls;
     metaEl.appendChild(s);
   };
-  if (ep.pub_date)    addMeta(ep.pub_date.substring(0, 16));
-  if (ep.duration)    addMeta(ep.duration);
+
+  if (ep.pub_date) addMeta(ep.pub_date.substring(0, 16));
+  if (ep.duration) addMeta(ep.duration);
   if (ep.file_size > 0) addMeta((ep.file_size / 1048576).toFixed(1) + ' MB');
-  if (ep.local_path)  addMeta('⬇ downloaded', 'text-blue');
-  if (ep.played)      addMeta('✔ played', 'text-green');
+  if (ep.local_path) addMeta('⬇ downloaded', 'text-blue');
+  if (ep.played) addMeta('✔ played', 'text-green');
 
   document.getElementById('detail-desc').innerHTML = ep.description || '<em>No description available.</em>';
 
@@ -322,385 +645,115 @@ function showEpisodeDetail(slug, epNum, ep, feedTitle) {
   mediaBtn.className = 'btn btn-primary';
   if (ep.local_path) {
     mediaBtn.textContent = '▶ Play';
-    mediaBtn.addEventListener('click', () => { closeDetail(); playEpisode(slug, epNum, ep.title, feedTitle); });
+    mediaBtn.addEventListener('click', () => { closeDetail(); playEpisode(slug, epNum, ep.title, feed.meta.title); });
   } else {
     mediaBtn.textContent = '⬇ Download';
-    mediaBtn.addEventListener('click', () => { closeDetail(); startDownloadFromStatus(slug, epNum, ep.title, feedTitle); });
+    mediaBtn.addEventListener('click', () => { closeDetail(); startDownloadFromStatus(slug, epNum, ep.title, feed.meta.title); });
   }
   actions.appendChild(mediaBtn);
 
   const markBtn = document.createElement('button');
-  markBtn.className   = 'btn btn-ghost';
+  markBtn.className = 'btn btn-ghost';
   markBtn.textContent = ep.played ? '✕ Mark Unplayed' : '✔ Mark Played';
-  markBtn.addEventListener('click', async () => { closeDetail(); await quickMark(slug, epNum, ep.played); });
+  markBtn.addEventListener('click', () => { closeDetail(); quickMark(slug, epNum, ep.played); });
   actions.appendChild(markBtn);
 
   document.getElementById('detail-overlay').classList.add('open');
 }
 
-function closeDetail() {
-  document.getElementById('detail-overlay').classList.remove('open');
+function closeDetail() { document.getElementById('detail-overlay').classList.remove('open'); }
+
+// ── Core Infrastructure ─────────────────────────────────────────────────────
+async function api(action, params = {}) {
+  const body = new FormData();
+  body.append('action', action);
+  for (const [k, v] of Object.entries(params)) body.append(k, v);
+  try {
+    const r = await fetch(location.pathname, {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      body,
+    });
+    const text = await r.text();
+    try { return JSON.parse(text); }
+    catch (e) {
+      console.error('Non-JSON response:', text);
+      return { error: 'Invalid server response' };
+    }
+  } catch (e) {
+    return { error: 'Request failed: ' + e.message };
+  }
 }
 
-document.getElementById('detail-overlay').addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeDetail();
+function toast(msg, type = 'success') {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  const icon = { success: '✔', error: '✗', info: 'ℹ' }[type] || '•';
+  t.className = `toast ${type}`;
+  t.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(() => {
+    t.classList.add('fade-out');
+    setTimeout(() => t.remove(), 400);
+  }, 4000);
+}
+
+let confirmCallback = null;
+function showConfirm(title, msg, cb) {
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-msg').textContent = msg;
+  confirmCallback = cb;
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+function closeConfirm() { document.getElementById('confirm-overlay').classList.remove('open'); }
+document.getElementById('confirm-ok').addEventListener('click', () => {
+  if (confirmCallback) confirmCallback();
+  closeConfirm();
 });
 
-// ── Search ───────────────────────────────────────────────────────────────────
-async function doSearch() {
-  const query     = document.getElementById('search-query').value.trim();
-  const limit     = document.getElementById('search-limit').value;
-  if (!query) { toast('Enter a search term', 'error'); return; }
-  const data      = await api('search', { query, limit });
-  const container = document.getElementById('search-results');
-  if (data.error) { toast(data.error, 'error'); return; }
-  const results   = data.results || {};
-  if (Object.keys(results).length === 0) {
-    container.innerHTML = `<div class="empty">No episodes matched "<strong>${escHtml(data.query)}</strong>".</div>`;
-    return;
-  }
-  container.innerHTML = '';
-  for (const [slug, group] of Object.entries(results)) {
-    const groupDiv = document.createElement('div');
-    groupDiv.className = 'search-group';
-
-    const groupTitle = document.createElement('div');
-    groupTitle.className = 'search-group-title';
-    groupTitle.textContent = '[' + slug + '] ' + group.title;
-    groupDiv.appendChild(groupTitle);
-
-    for (const ep of group.episodes) {
-      const row = document.createElement('div');
-      row.className = 'search-ep';
-
-      const titleEl = document.createElement('div');
-      titleEl.className = 'search-ep-title';
-      titleEl.textContent = ep.title;
-
-      const dateEl = document.createElement('div');
-      dateEl.className = 'search-ep-date';
-      dateEl.textContent = ep.pub_date ? ep.pub_date.substring(0, 16) : '';
-
-      row.appendChild(titleEl);
-      row.appendChild(dateEl);
-      row.addEventListener('click', () => showEpisodeDetail(slug, ep.ep_num, ep, group.title));
-      groupDiv.appendChild(row);
-    }
-
-    container.appendChild(groupDiv);
-  }
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-
-// ── Discover ─────────────────────────────────────────────────────────────────
-async function doDiscover() {
-  const query     = document.getElementById('discover-query').value.trim();
-  const container = document.getElementById('discover-results');
-  if (!query) { toast('Enter a podcast name or topic', 'error'); return; }
-
-  container.innerHTML = '<div class="empty"><span class="spinner"></span> Searching iTunes...</div>';
-
-  const data = await api('discover', { query });
-  if (data.error) {
-    container.innerHTML = `<div class="empty text-red">✗ ${escHtml(data.error)}</div>`;
-    return;
-  }
-
-  const results = data.results || [];
-  if (results.length === 0) {
-    container.innerHTML = `<div class="empty">No podcasts found for "<strong>${escHtml(query)}</strong>".</div>`;
-    return;
-  }
-
-  container.innerHTML = '';
-  results.forEach(res => {
-    const card = document.createElement('div');
-    card.className = 'discover-card';
-    card.innerHTML = `
-      <img src="${escHtml(res.image)}" alt="Artwork" class="discover-img">
-      <div class="discover-body">
-        <div class="discover-title" title="${escHtml(res.title)}">${escHtml(res.title)}</div>
-        <div class="discover-author">${escHtml(res.author)}</div>
-        <div class="discover-genres">${escHtml(res.genres.slice(0, 2).join(', '))}</div>
-        <button class="btn btn-primary btn-sm mt8" onclick="addFromDiscover('${escHtml(res.url)}')">+ Add</button>
-      </div>`;
-    container.appendChild(card);
-  });
+function escJs(s) {
+  return String(s).replace(/'/g, "\\'");
 }
-
-async function addFromDiscover(url) {
-  tabs.forEach(x => x.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  const addTabLink = document.querySelector('[data-tab="tab-add"]');
-  addTabLink.classList.add('active');
-  document.getElementById('tab-add').classList.add('active');
-
-  document.getElementById('add-url').value = url;
-  document.getElementById('add-name').focus();
-  toast('Feed URL copied to Add tab', 'info');
-}
-
-// ── Status ───────────────────────────────────────────────────────────────────
-let _statusCache    = null;
-let _statusSlug     = null;
-let _statusDebounce = null;
-
-async function loadStatus(forceRefresh = false) {
-  const slug  = document.getElementById('status-slug').value;
-  const countVal = parseInt(document.getElementById('status-count').value);
-  const count = isNaN(countVal) ? 10 : countVal;
-  const panel = document.getElementById('status-panel');
-  if (!slug) { panel.innerHTML = ''; _statusCache = null; _statusSlug = null; return; }
-
-  if (!forceRefresh && _statusCache && _statusSlug === slug) {
-    renderStatus(slug, _statusCache, count, panel);
-    return;
-  }
-
-  clearTimeout(_statusDebounce);
-  _statusDebounce = setTimeout(async () => {
-    const data  = await api('get_feeds');
-    const feeds = data.feeds || {};
-    _statusCache = feeds[slug] || null;
-    _statusSlug  = slug;
-    if (!_statusCache) { panel.innerHTML = '<div class="empty">Feed not found.</div>'; return; }
-    renderStatus(slug, _statusCache, count, panel);
-  }, 120);
-}
-
-function renderStatus(slug, feed, count, panel) {
-  const meta     = feed.meta;
-  const episodes = feed.episodes || [];
-  const played   = episodes.filter(e => e.played).length;
-  const shown    = count === 0 ? episodes : episodes.slice(0, count);
-
-  const wrap = document.createElement('div');
-  wrap.className = 'panel';
-  wrap.innerHTML = `
-    <div class="panel-title">${escHtml(meta.title)}</div>
-    <div class="meta-grid">
-      <span class="meta-key">Slug</span>      <span class="meta-val text-amber">${escHtml(slug)}</span>
-      <span class="meta-key">URL</span>       <span class="meta-val"><a href="${escHtml(feed.url)}" target="_blank" style="color:var(--blue)">${escHtml(feed.url)}</a></span>
-      <span class="meta-key">Added</span>     <span class="meta-val">${escHtml((feed.added || '').substring(0, 19))}</span>
-      <span class="meta-key">Updated</span>   <span class="meta-val">${escHtml((feed.last_updated || '').substring(0, 19))}</span>
-      <span class="meta-key">Episodes</span>  <span class="meta-val">${episodes.length}</span>
-      <span class="meta-key">Played</span>    <span class="meta-val">${played} / ${episodes.length}</span>
-    </div>
-    ${meta.description ? descriptionHtml(meta.description) : ''}
-    <div class="panel-title" style="margin-top:4px">Latest ${shown.length} Episode(s)</div>`;
-
-  if (!shown.length) {
-    const empty = document.createElement('div');
-    empty.className   = 'empty';
-    empty.textContent = 'No episodes.';
-    wrap.appendChild(empty);
-  } else {
-    shown.forEach((ep, i) => {
-      const epNum = i + 1;
-      const pub   = ep.pub_date ? ep.pub_date.substring(0, 16) : '';
-      const dur   = ep.duration ? ` · ${ep.duration}` : '';
-      const mb    = ep.file_size > 0 ? ` · ${(ep.file_size / 1048576).toFixed(1)} MB` : '';
-
-      const row = document.createElement('div');
-      row.className = 'episode-row';
-      row.innerHTML = `
-        <div class="ep-num">${epNum}.</div>
-        <div class="ep-body">
-          <div class="ep-title-row">
-            <span class="ep-glyph played${ep.played ? ' on' : ''}" title="${ep.played ? 'Played' : ''}">\u2714</span>
-            <span class="ep-title">${escHtml(ep.title)}</span>
-          </div>
-          <div class="ep-meta-row">
-            <span class="ep-glyph dl${ep.local_path ? ' on' : ''}" title="${ep.local_path ? 'Downloaded' : ''}">\u2b07</span>
-            <span class="ep-meta">${escHtml(pub)}${escHtml(dur)}${mb}</span>
-          </div>
-        </div>
-        <div class="ep-actions"></div>`;
-
-      const actions = row.querySelector('.ep-actions');
-
-      const mediaBtn = document.createElement('button');
-      mediaBtn.className = 'btn btn-ghost btn-sm';
-      if (ep.local_path) {
-        mediaBtn.title       = 'Play';
-        mediaBtn.textContent = '\u25b6 Play';
-        mediaBtn.addEventListener('click', () => playEpisode(slug, epNum, ep.title, meta.title));
-      } else {
-        mediaBtn.title       = 'Download';
-        mediaBtn.textContent = '\u2b07';
-        mediaBtn.addEventListener('click', () => startDownloadFromStatus(slug, epNum, ep.title, meta.title));
-      }
-      actions.appendChild(mediaBtn);
-
-      const markBtn = document.createElement('button');
-      markBtn.className   = 'btn btn-ghost btn-sm ep-mark-btn';
-      markBtn.textContent = ep.played ? 'mark unplayed' : 'mark played';
-      markBtn.addEventListener('click', () => quickMark(slug, epNum, ep.played));
-      actions.appendChild(markBtn);
-
-      const infoBtn = document.createElement('button');
-      infoBtn.className   = 'btn btn-ghost btn-sm';
-      infoBtn.title       = 'View details';
-      infoBtn.textContent = '…';
-      infoBtn.addEventListener('click', () => showEpisodeDetail(slug, epNum, ep, meta.title));
-      actions.appendChild(infoBtn);
-
-      wrap.appendChild(row);
-    });
-  }
-
-  panel.innerHTML = '';
-  panel.appendChild(wrap);
-}
-
-async function openStatus(slug) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.nav-link').forEach(a => a.classList.remove('active'));
-  document.getElementById('tab-status').classList.add('active');
-  document.querySelector('[data-tab="tab-status"]').classList.add('active');
-  document.getElementById('status-slug').value = slug;
-  _statusCache = null;
-  await loadStatus();
-}
-
-async function quickMark(slug, episode, unplayed) {
-  await api('mark_played', { slug, episode, unplayed: unplayed ? '1' : '0' });
-  toast(`Episode ${episode} marked ${unplayed ? 'unplayed' : 'played'}`, 'success');
-  _statusCache = null;
-  loadStatus(true);
-}
-
-// ── Refresh page data ────────────────────────────────────────────────────────
-async function refreshSelects() {
-  const data  = await api('get_feeds');
-  const feeds = data.feeds || {};
-  const makeOpts = (includeBlank, blankLabel) => {
-    let h = includeBlank ? `<option value="">${blankLabel}</option>` : '';
-    for (const [s, f] of Object.entries(feeds))
-      h += `<option value="${escHtml(s)}">${escHtml(s)} — ${escHtml(f.meta.title)}</option>`;
-    return h;
-  };
-  document.getElementById('update-slug').innerHTML = makeOpts(true, '— All Feeds —');
-  document.getElementById('dl-slug').innerHTML     = makeOpts(true, '— All Feeds —');
-  document.getElementById('status-slug').innerHTML = makeOpts(true, '— Choose a feed —');
-  document.getElementById('mark-slug').innerHTML   = makeOpts(true, '— Choose a feed —');
-  document.getElementById('remove-slug').innerHTML = makeOpts(true, '— Choose a feed —');
-  refreshList(feeds);
-}
-
 function fmtDate(s) {
   if (!s) return '';
   const d = new Date(s.replace(' ', 'T'));
   return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 }
-
-function refreshList(feeds) {
-  const tbody  = document.querySelector('#tab-list tbody');
-  const header = document.querySelector('#tab-list .page-subtitle');
-  if (!tbody) return;
-  if (header) header.textContent = Object.keys(feeds).length + ' feed(s) subscribed';
-  if (!Object.keys(feeds).length) {
-    tbody.closest('.panel').innerHTML = '<div class="empty" style="padding:20px">No feeds yet. Use <strong>Add Feed</strong> to subscribe to a podcast.</div>';
-    return;
-  }
-  tbody.innerHTML = '';
-  const sorted = Object.entries(feeds).sort(([, a], [, b]) =>
-    (a.meta.title || '').localeCompare(b.meta.title || '', undefined, { sensitivity: 'base' }));
-  for (const [slug, feed] of sorted) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="title">${escHtml(feed.meta.title)}</td>
-      <td class="num">${(feed.episodes || []).length}</td>
-      <td class="date">${escHtml(fmtDate(feed.last_updated))}</td>
-      <td class="slug">${escHtml(slug)}</td>
-      <td class="actions"><button class="btn btn-ghost btn-sm" onclick="openStatus('${escHtml(slug)}')">status</button></td>`;
-    tbody.appendChild(tr);
-  }
-}
-
-function refreshPage() { refreshSelects(); }
-
-// ── Audio Player ─────────────────────────────────────────────────────────────
-let currentPlayerSpeed = 1;
-
-function playEpisode(slug, episodeNum, title, feedTitle) {
-  const bar   = document.getElementById('player-bar');
-  const audio = document.getElementById('player-audio');
-  const et    = document.getElementById('player-ep-title');
-  const ft    = document.getElementById('player-feed-title');
-
-  const src = `?action=stream&slug=${encodeURIComponent(slug)}&episode=${episodeNum}`;
-  audio.src = src;
-  et.textContent = title;
-  ft.textContent = feedTitle;
-  bar.classList.add('open');
-
-  // Apply current speed to new source
-  audio.playbackRate = currentPlayerSpeed;
-  document.getElementById('player-speed').value = currentPlayerSpeed;
-
-  audio.play().catch(() => {});
-
-  document.querySelector('.main').style.paddingBottom = '84px';
-}
-
-function closePlayer() {
-  const audio = document.getElementById('player-audio');
-  audio.pause();
-  audio.src = '';
-  document.getElementById('player-bar').classList.remove('open');
-  document.querySelector('.main').style.paddingBottom = '';
-}
-
-function skipPlayer(seconds) {
-  const audio = document.getElementById('player-audio');
-  if (!audio.src) return;
-  audio.currentTime += seconds;
-}
-
-function setPlayerSpeed(rate) {
-  const audio = document.getElementById('player-audio');
-  currentPlayerSpeed = parseFloat(rate);
-  if (audio.src) {
-    audio.playbackRate = currentPlayerSpeed;
-  }
-}
-
-// Start a download from the status view and switch to the download tab
-function startDownloadFromStatus(slug, episodeNum, title, feedTitle) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.nav-link').forEach(a => a.classList.remove('active'));
-  document.getElementById('tab-download').classList.add('active');
-  document.querySelector('[data-tab="tab-download"]').classList.add('active');
-  sseDownloadOne(slug, episodeNum, title, feedTitle);
-}
-
-// ── Description expand/collapse ──────────────────────────────────────────────
 function descriptionHtml(text, maxChars = 220) {
   if (!text) return '';
   const esc = escHtml(text);
-  if (text.length <= maxChars) {
-    return `<div class="feed-desc">${esc}</div>`;
-  }
+  if (text.length <= maxChars) return `<div class="feed-desc">${esc}</div>`;
   const short = escHtml(text.substring(0, maxChars));
   return `<div class="feed-desc">` +
     `<span class="desc-short">${short}&hellip; <a href="#" class="desc-toggle" onclick="toggleDesc(this);return false;">show more</a></span>` +
     `<span class="desc-full" hidden>${esc} <a href="#" class="desc-toggle" onclick="toggleDesc(this);return false;">show less</a></span>` +
     `</div>`;
 }
-
 function toggleDesc(link) {
-  const wrap  = link.closest('.feed-desc');
-  const short = wrap.querySelector('.desc-short');
-  const full  = wrap.querySelector('.desc-full');
-  short.hidden = !short.hidden;
-  full.hidden  = !full.hidden;
+  const wrap = link.closest('.feed-desc');
+  wrap.querySelector('.desc-short').hidden = !wrap.querySelector('.desc-short').hidden;
+  wrap.querySelector('.desc-full').hidden = !wrap.querySelector('.desc-full').hidden;
 }
 
-// ── Utility ──────────────────────────────────────────────────────────────────
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g,  '&amp;')
-    .replace(/</g,  '&lt;')
-    .replace(/>/g,  '&gt;')
-    .replace(/"/g,  '&quot;');
-}
+// ── Initialize ──────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  // Initial state load
+  api('get_feeds').then(data => {
+    if (data.feeds) {
+      state.feeds = data.feeds;
+      updateSelectOptions();
+      render();
+    }
+  });
+
+  // Global listeners
+  document.getElementById('detail-overlay').addEventListener('click', e => {
+    if (e.target.id === 'detail-overlay') closeDetail();
+  });
+  document.getElementById('confirm-overlay').addEventListener('click', e => {
+    if (e.target.id === 'confirm-overlay') closeConfirm();
+  });
+});
