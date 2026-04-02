@@ -447,12 +447,16 @@ function playEpisode(slug, episodeNum, title, feedTitle) {
   audio.src = src;
   audio.playbackRate = state.player.speed;
 
-  // Resume from saved progress
-  const feed = state.feeds[slug];
-  const ep = feed ? feed.episodes[episodeNum - 1] : null;
-  if (ep && ep.progress > 0 && !ep.played) {
-    audio.currentTime = ep.progress;
-  }
+  // Resume from saved progress once metadata is loaded
+  const onMetadata = () => {
+    const feed = state.feeds[slug];
+    const ep = feed ? feed.episodes[episodeNum - 1] : null;
+    if (ep && ep.progress > 0 && !ep.played) {
+      audio.currentTime = ep.progress;
+    }
+    audio.removeEventListener('loadedmetadata', onMetadata);
+  };
+  audio.addEventListener('loadedmetadata', onMetadata);
 
   audio.play().catch(() => {});
 }
@@ -817,6 +821,20 @@ window.addEventListener('DOMContentLoaded', () => {
   audio.addEventListener('pause', syncProgress);
   audio.addEventListener('ended', syncProgress);
   
+  // Update local UI state as it plays
+  audio.addEventListener('timeupdate', () => {
+    if (!state.player.slug) return;
+    const slug = state.player.slug;
+    const epNum = state.player.episodeNum;
+    if (state.feeds[slug] && state.feeds[slug].episodes[epNum - 1]) {
+      state.feeds[slug].episodes[epNum - 1].progress = audio.currentTime;
+      if (audio.duration > 0) {
+        state.feeds[slug].episodes[epNum - 1].duration_seconds = audio.duration;
+      }
+      render(); 
+    }
+  });
+
   // Periodic sync every 15 seconds
   setInterval(syncProgress, 15000);
 
