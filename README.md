@@ -8,20 +8,24 @@ Designed as a web front-end companion to the [Podcatcher CLI](https://github.com
 
 ## Features
 
+- **Discover** new podcasts using the integrated iTunes Search API
 - **Subscribe** to any standard RSS/Atom podcast feed by URL
-- **Update** feeds to check for new episodes — one at a time or all at once
+- **Update** feeds to check for new episodes — manually in the UI or automatically via CLI
 - **Download** episodes to disk with a real-time progress bar (Server-Sent Events)
-- **Stream** downloaded episodes directly in the browser with a persistent player bar and seeking support
+- **Persistent Progress**: Your playback position is saved to the server and automatically resumed on any device
+- **Advanced Player**: Skip (+/- 10s, +/- 30s) and variable playback speed controls
+- **Themes**: Support for System, Light, and Dark modes via the Settings tab
 - **Search** across all episode titles and descriptions
 - **Track** played/unplayed state per episode
 - **Remove** feeds (downloaded files are kept)
+- **Security**: Built-in CSRF protection for all state-changing actions
 
 ---
 
 ## Requirements
 
 - PHP 8.1 or later
-- Extensions: `simplexml`, `fileinfo` (both enabled by default in most PHP installs)
+- Extensions: `simplexml`, `fileinfo`, `session`
 - A web server: Apache, Nginx, Caddy, or PHP's built-in server for local use
 - Write access to the user's home directory (for `~/.podcatcher/`)
 
@@ -46,102 +50,73 @@ php -S localhost:8080
 
 Then open [http://localhost:8080](http://localhost:8080) in your browser.
 
-For a permanent installation, point your web server's document root at the project directory. The entry point is `index.php`.
+---
 
-**Apache example** (`/etc/apache2/sites-available/podcatcher.conf`):
-```apache
-<VirtualHost *:80>
-    ServerName podcatcher.local
-    DocumentRoot /var/www/podcatcher-web
-    <Directory /var/www/podcatcher-web>
-        AllowOverride All
-        Require all granted
-    </Directory>
-</VirtualHost>
+## CLI Automation
+
+Podcatcher Web can be run from the command line to automate feed updates and downloads (ideal for `cron` jobs).
+
+```bash
+# Update all feeds
+php index.php update
+
+# Update all feeds and automatically download any new episodes
+php index.php update --download
 ```
 
-**Nginx example**:
-```nginx
-server {
-    listen 80;
-    server_name podcatcher.local;
-    root /var/www/podcatcher-web;
-    index index.php;
-
-    location ~ \.php$ {
-        fastcgi_pass unix:/run/php/php8.1-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        include fastcgi_params;
-    }
-}
+**Example Crontab** (updates every hour):
+```bash
+0 * * * * cd /path/to/podcatcher-web && /usr/bin/php index.php update --download >> updates.log
 ```
-
-> **Nginx note:** Add `fastcgi_buffering off;` to your PHP location block, otherwise Nginx will buffer the Server-Sent Events stream and the download progress bar won't update in real time.
 
 ---
 
-## Data storage
+## Project Structure
+
+```
+podcatcher-web/
+├── index.php               # Entry point, router, and CLI handler
+├── lib/                    # Modular PHP logic
+│   ├── actions.php         # AJAX API action handlers
+│   ├── downloader.php      # Streaming and SSE download logic
+│   ├── rss.php             # Feed fetching and XML parsing
+│   └── utils.php           # Storage and filesystem helpers
+├── views/
+│   └── main.html.php       # Main UI template
+└── assets/
+    ├── style.css           # Themeable CSS variables and styles
+    └── app.js              # State-driven Vanilla JS frontend
+```
+
+### Technical Architecture
+
+- **Backend**: Modular PHP with a single-entry router (`index.php`). Uses a "no-framework" approach with clean separation of concerns in `lib/`.
+- **Frontend**: Declarative "render-from-state" model in `app.js`. Every state change (`setState()`) triggers a full UI synchronization (`render()`), ensuring the interface is always consistent.
+- **Communication**: Uses standard AJAX (`fetch`) for actions and Server-Sent Events (SSE) for real-time progress during downloads.
+
+---
+
+## Data Storage
 
 All data is stored in `~/.podcatcher/` relative to the user the web server runs as:
 
 ```
 ~/.podcatcher/
-├── feeds.json          # subscriptions, episode metadata, played state
+├── feeds.json          # subscriptions, episode metadata, played state, and progress
 └── episodes/
-    ├── my-podcast/
-    │   └── episode-title.mp3
-    └── another-show/
-        └── another-episode.mp3
+    ├── podcast-slug/
+    │   └── episode-file.mp3
 ```
 
-`feeds.json` is plain JSON and human-readable. It is compatible with the Podcatcher Python CLI — both tools read and write the same file.
-
-Removing a feed through the UI deletes it from `feeds.json` but does **not** delete any downloaded audio files.
-
----
-
-## Project structure
-
-```
-podcatcher-web/
-├── index.php               # PHP backend — config, feed parsing, all action handlers
-├── views/
-│   └── main.html.php       # HTML template
-└── assets/
-    ├── style.css           # All styles
-    └── app.js              # All client-side JavaScript
-```
-
-### How requests are handled
-
-`index.php` serves three different roles depending on the request:
-
-| Request type | How it's identified | What happens |
-|---|---|---|
-| Normal page load | `GET` with no `action` param | Loads feeds, renders `views/main.html.php` |
-| AJAX action | `POST` with `X-Requested-With: XMLHttpRequest` | Returns JSON, handled by `match($action)` |
-| Audio stream | `GET ?action=stream` | Streams local file with HTTP range support |
-| Download progress | `GET ?action=sse_download` | Opens SSE stream, downloads file, pushes progress events |
-
-### How downloads work
-
-Clicking Download opens a `EventSource` connection to `?action=sse_download&slug=...&episode=...`. PHP fetches the remote audio file in 64 KB chunks, writing each to disk and pushing a Server-Sent Event with `{pct, mb_done, mb_total}` after each chunk. The browser updates the progress bar in real time. On completion, PHP writes the local file path back into `feeds.json` and sends a final `{done: true}` event. Multiple downloads run concurrently in separate SSE connections.
+`feeds.json` is compatible with the Podcatcher Python CLI — both tools read and write the same file format.
 
 ---
 
 ## Security
 
-This application is designed for **personal/local use**. It has no authentication layer. If you expose it on a network:
-
-- Put it behind HTTP basic auth at the web server level (`.htpasswd` for Apache, `auth_basic` for Nginx)
-- Or use a VPN / SSH tunnel for remote access
-- Restrict write access to `~/.podcatcher/` to the web server user only
-
----
-
-## Compatibility with the Python CLI
-
-The Python CLI and this web interface share `~/.podcatcher/feeds.json` without conflict, with one caveat: if both are running update or download operations at exactly the same time, the last writer wins on `feeds.json`. In practice this is unlikely to cause problems for personal use.
+- **CSRF Protection**: All `POST` requests require a valid session-based security token.
+- **Session Security**: Cookies are configured with `HttpOnly` and `SameSite=Strict`.
+- **Access Control**: Designed for **personal/local use**. If exposing it to the internet, put it behind HTTP basic auth at the web server level.
 
 ---
 
