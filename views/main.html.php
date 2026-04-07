@@ -297,7 +297,7 @@
         </div>
         <div id="remove-result" class="mt8"></div>
         <div class="mt16" style="font-size:11px;color:var(--muted);">
-          Note: downloaded audio files in <code>~/.podcatcher/episodes/</code> are <strong>not</strong> deleted.
+          Note: downloaded audio files in <code>~/.podcatcher/episodes/</code> are <strong>automatically deleted</strong> when an episode is no longer in the feed or when a podcast is removed.
         </div>
       </div>
     </div>

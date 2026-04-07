@@ -30,6 +30,18 @@ function action_add(): array {
     $slug = $name ? $name : slugify($meta['title']);
     $slug = unique_slug($slug, $feeds);
 
+    $dest_dir = episode_dir($slug);
+    foreach ($episodes as &$ep) {
+        $filename = safe_filename($ep['title'], $ep['audio_url']);
+        $dest     = $dest_dir . '/' . $filename;
+        if (file_exists($dest) && filesize($dest) >= 1024) {
+            $ep['local_path'] = $dest;
+        } else {
+            $ep['local_path'] = '';
+        }
+    }
+    unset($ep);
+
     $known_guids = array_column($episodes, 'guid');
 
     $feeds[$slug] = [
@@ -83,6 +95,20 @@ function action_update(?callable $progress_cb = null): array {
         }
 
         $new_eps     = $parsed['episodes'];
+        $new_guids   = array_flip(array_column($new_eps, 'guid'));
+        $old_eps     = $feed['episodes'] ?? [];
+
+        // Cleanup episodes no longer in the feed
+        foreach ($old_eps as $old_ep) {
+            $guid = $old_ep['guid'] ?? '';
+            if ($guid && !isset($new_guids[$guid])) {
+                $path = $old_ep['local_path'] ?? '';
+                if ($path && file_exists($path)) {
+                    @unlink($path);
+                }
+            }
+        }
+
         $known_guids = array_flip($feed['known_guids'] ?? []);
         $fresh       = array_filter($new_eps, fn($e) => !isset($known_guids[$e['guid']]));
 
@@ -95,9 +121,19 @@ function action_update(?callable $progress_cb = null): array {
             if ($e['local_path'] ?? '') $local_paths[$e['guid']] = $e['local_path'];
         }
 
+        $dest_dir = episode_dir($s);
         foreach ($new_eps as &$ep) {
             $ep['played']     = isset($played_guids[$ep['guid']]);
             $ep['local_path'] = $local_paths[$ep['guid']] ?? '';
+
+            // If local_path is empty but file exists, set it
+            if (!$ep['local_path']) {
+                $filename = safe_filename($ep['title'], $ep['audio_url']);
+                $dest     = $dest_dir . '/' . $filename;
+                if (file_exists($dest) && filesize($dest) >= 1024) {
+                    $ep['local_path'] = $dest;
+                }
+            }
         }
         unset($ep);
 
@@ -112,6 +148,7 @@ function action_update(?callable $progress_cb = null): array {
                 $new_episodes[] = [
                     'slug'       => $s,
                     'ep_num'     => $i + 1,
+                    'guid'       => $ep['guid'],
                     'title'      => $ep['title'],
                     'feed_title' => $feed_title,
                 ];
@@ -160,6 +197,13 @@ function action_remove(): array {
     $feeds = load_feeds();
     if (!isset($feeds[$slug])) return ['error' => "No feed with slug '{$slug}'."];
     $title = $feeds[$slug]['meta']['title'];
+    
+    // Cleanup downloaded episodes
+    $dest_dir = EPISODES_DIR . '/' . $slug;
+    if (is_dir($dest_dir)) {
+        delete_dir($dest_dir);
+    }
+
     unset($feeds[$slug]);
     save_feeds($feeds);
     return ['success' => "Removed <strong>{$title}</strong>."];
@@ -168,6 +212,7 @@ function action_remove(): array {
 function action_mark_played(): array {
     $slug     = trim($_POST['slug'] ?? '');
     $episode  = (int)($_POST['episode'] ?? 0);
+    $guid     = trim($_POST['guid'] ?? '');
     $unplayed = ($_POST['unplayed'] ?? '') === '1';
 
     $feeds = load_feeds();
@@ -177,12 +222,12 @@ function action_mark_played(): array {
     $state    = !$unplayed;
     $label    = $unplayed ? 'unplayed' : 'played';
 
-    if ($episode > 0) {
-        $idx = $episode - 1;
-        if (!isset($episodes[$idx])) return ['error' => 'Episode index out of range.'];
+    if ($episode > 0 || $guid) {
+        $idx = find_episode_idx($episodes, $episode, $guid);
+        if ($idx === -1) return ['error' => 'Episode not found.'];
         $episodes[$idx]['played'] = $state;
         save_feeds($feeds);
-        return ['success' => "Marked episode {$episode} as {$label}."];
+        return ['success' => "Marked episode as {$label}."];
     }
 
     foreach ($episodes as &$ep) $ep['played'] = $state;
@@ -244,16 +289,17 @@ function action_discover(): array {
 function action_save_progress(): array {
     $slug     = trim($_POST['slug'] ?? '');
     $episode  = (int)($_POST['episode'] ?? 0);
+    $guid     = trim($_POST['guid'] ?? '');
     $position = (float)($_POST['position'] ?? 0);
     $duration = (float)($_POST['duration'] ?? 0);
 
-    if (!$slug || $episode < 1) return ['error' => 'Missing slug or episode'];
+    if (!$slug || (!$episode && !$guid)) return ['error' => 'Missing slug or episode'];
 
     $feeds = load_feeds();
     if (!isset($feeds[$slug])) return ['error' => 'Feed not found'];
 
-    $idx = $episode - 1;
-    if (!isset($feeds[$slug]['episodes'][$idx])) return ['error' => 'Episode not found'];
+    $idx = find_episode_idx($feeds[$slug]['episodes'] ?? [], $episode, $guid);
+    if ($idx === -1) return ['error' => 'Episode not found'];
 
     $feeds[$slug]['episodes'][$idx]['progress'] = $position;
     if ($duration > 0) {
@@ -279,10 +325,12 @@ function action_save_progress(): array {
 function action_remove_download(): array {
     $slug    = trim($_POST['slug'] ?? '');
     $episode = (int)($_POST['episode'] ?? 0);
+    $guid    = trim($_POST['guid'] ?? '');
     $feeds   = load_feeds();
     if (!isset($feeds[$slug])) return ['error' => 'Feed not found'];
-    $idx = $episode - 1;
-    if (!isset($feeds[$slug]['episodes'][$idx])) return ['error' => 'Episode not found'];
+
+    $idx = find_episode_idx($feeds[$slug]['episodes'] ?? [], $episode, $guid);
+    if ($idx === -1) return ['error' => 'Episode not found'];
 
     $path = $feeds[$slug]['episodes'][$idx]['local_path'] ?? '';
     if ($path && file_exists($path)) {

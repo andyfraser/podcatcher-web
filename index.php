@@ -34,7 +34,7 @@ if (PHP_SAPI === 'cli') {
             echo "\nDownloading " . count($res['new_episodes']) . " new episodes...\n";
             foreach ($res['new_episodes'] as $ep) {
                 echo "-> {$ep['title']} [{$ep['slug']}]... ";
-                $dl = download_episode($ep['slug'], $ep['ep_num']);
+                $dl = download_episode($ep['slug'], $ep['ep_num'], $ep['guid']);
                 if (isset($dl['error'])) echo "ERROR: {$dl['error']}\n";
                 else echo "DONE\n";
             }

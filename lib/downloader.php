@@ -4,13 +4,17 @@
 function action_stream(): void {
     $slug    = preg_replace('/[^a-z0-9_-]/i', '', $_GET['slug'] ?? '');
     $episode = (int)($_GET['episode'] ?? 0);
-    if (!$slug || $episode < 1) { http_response_code(400); exit; }
+    $guid    = $_GET['guid'] ?? null;
+
+    if (!$slug || (!$episode && !$guid)) { http_response_code(400); exit; }
 
     $feeds = load_feeds();
     if (!isset($feeds[$slug])) { http_response_code(404); exit; }
 
-    $ep = $feeds[$slug]['episodes'][$episode - 1] ?? null;
-    if (!$ep) { http_response_code(404); exit; }
+    $idx = find_episode_idx($feeds[$slug]['episodes'] ?? [], $episode, $guid);
+    if ($idx === -1) { http_response_code(404); exit; }
+
+    $ep = $feeds[$slug]['episodes'][$idx];
 
     $path = $ep['local_path'] ?? '';
     if (!$path || !file_exists($path)) { http_response_code(404); exit; }
@@ -59,15 +63,14 @@ function sse_event(array $data): void {
 /**
  * Core download logic reusable for SSE and CLI.
  */
-function download_episode(string $slug, int $episodeNum, ?callable $progress_cb = null): array {
+function download_episode(string $slug, int $episodeNum, ?string $guid = null, ?callable $progress_cb = null): array {
     $feeds = load_feeds();
     if (!isset($feeds[$slug])) return ['error' => "Feed '{$slug}' not found"];
 
-    $episodes = $feeds[$slug]['episodes'] ?? [];
-    $idx      = $episodeNum - 1;
-    if (!isset($episodes[$idx])) return ['error' => 'Episode not found'];
+    $idx = find_episode_idx($feeds[$slug]['episodes'] ?? [], $episodeNum, $guid);
+    if ($idx === -1) return ['error' => 'Episode not found'];
 
-    $ep  = $episodes[$idx];
+    $ep  = $feeds[$slug]['episodes'][$idx];
     $url = $ep['audio_url'];
 
     $dest_dir = episode_dir($slug);
@@ -149,10 +152,17 @@ function download_episode(string $slug, int $episodeNum, ?callable $progress_cb 
         return ['error' => 'Download produced empty or invalid file'];
     }
 
+    // Capture the GUID to find the episode after reloading feeds
+    $guid = $ep['guid'] ?? null;
+
     // Reload feeds to prevent race conditions during long downloads
     $feeds = load_feeds();
-    $feeds[$slug]['episodes'][$idx]['local_path'] = $dest;
-    save_feeds($feeds);
+    $targetIdx = find_episode_idx($feeds[$slug]['episodes'] ?? [], $episodeNum, $guid);
+
+    if ($targetIdx !== -1) {
+        $feeds[$slug]['episodes'][$targetIdx]['local_path'] = $dest;
+        save_feeds($feeds);
+    }
 
     return [
         'pct'      => 100,
@@ -166,8 +176,10 @@ function download_episode(string $slug, int $episodeNum, ?callable $progress_cb 
 function action_sse_download(): void {
     $slug    = preg_replace('/[^a-z0-9_-]/i', '', $_GET['slug'] ?? '');
     $episode = (int)($_GET['episode'] ?? 0);
-    if (!$slug || $episode < 1) {
-        sse_event(['error' => 'Missing slug or episode']); exit;
+    $guid    = $_GET['guid'] ?? null;
+
+    if (!$slug || (!$episode && !$guid)) {
+        sse_event(['error' => 'Missing slug, episode or guid']); exit;
     }
 
     while (ob_get_level()) ob_end_clean();
@@ -177,7 +189,7 @@ function action_sse_download(): void {
     header('Cache-Control: no-cache');
     header('X-Accel-Buffering: no');
 
-    $result = download_episode($slug, $episode, function($data) {
+    $result = download_episode($slug, $episode, $guid, function($data) {
         sse_event($data);
     });
 

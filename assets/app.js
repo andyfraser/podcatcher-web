@@ -159,13 +159,13 @@ function renderStatus() {
           </div>
           <div class="ep-actions">
             ${ep.local_path
-              ? `<button class="btn btn-ghost btn-sm" onclick="playEpisode('${escHtml(slug)}', ${epNum}, '${escJs(ep.title)}', '${escJs(meta.title)}')" title="Play">▶ Play</button>`
-              : `<button class="btn btn-ghost btn-sm" onclick="startDownloadFromStatus('${escHtml(slug)}', ${epNum}, '${escJs(ep.title)}', '${escJs(meta.title)}')" title="Download">⬇</button>`
+              ? `<button class="btn btn-ghost btn-sm" onclick="playEpisode('${escHtml(slug)}', ${epNum}, '${escJs(ep.title)}', '${escJs(meta.title)}', '${escJs(ep.guid)}')" title="Play">▶ Play</button>`
+              : `<button class="btn btn-ghost btn-sm" onclick="startDownloadFromStatus('${escHtml(slug)}', ${epNum}, '${escJs(ep.title)}', '${escJs(meta.title)}', '${escJs(ep.guid)}')" title="Download">⬇</button>`
             }
-            <button class="btn btn-ghost btn-sm ep-mark-btn" onclick="quickMark('${escHtml(slug)}', ${epNum}, ${ep.played})">
+            <button class="btn btn-ghost btn-sm ep-mark-btn" onclick="quickMark('${escHtml(slug)}', ${epNum}, ${ep.played}, '${escJs(ep.guid)}')">
               ${ep.played ? 'mark unplayed' : 'mark played'}
             </button>
-            <button class="btn btn-ghost btn-sm" onclick="showEpisodeDetail('${escHtml(slug)}', ${epNum})" title="View details">…</button>
+            <button class="btn btn-ghost btn-sm" onclick="showEpisodeDetail('${escHtml(slug)}', ${epNum}, '${escJs(ep.guid)}')" title="View details">…</button>
           </div>
         </div>`;
     });
@@ -193,7 +193,7 @@ function renderSearch() {
         <div class="search-group-title">[${escHtml(slug)}] ${escHtml(group.title)}</div>`;
     for (const ep of group.episodes) {
       html += `
-        <div class="search-ep" onclick="showEpisodeDetail('${escHtml(slug)}', ${ep.ep_num})">
+        <div class="search-ep" onclick="showEpisodeDetail('${escHtml(slug)}', ${ep.ep_num}, '${escJs(ep.guid)}')">
           <div class="search-ep-title">${escHtml(ep.title)}</div>
           <div class="search-ep-date">${escHtml(ep.pub_date ? ep.pub_date.substring(0, 16) : '')}</div>
         </div>`;
@@ -456,9 +456,9 @@ function changeTheme(theme) {
 // ── Audio Player ─────────────────────────────────────────────────────────────
 let lastSyncedPosition = -1;
 
-function playEpisode(slug, episodeNum, title, feedTitle) {
+function playEpisode(slug, episodeNum, title, feedTitle, guid = '') {
   const audio = document.getElementById('player-audio');
-  const src = `?action=stream&slug=${encodeURIComponent(slug)}&episode=${episodeNum}`;
+  const src = `?action=stream&slug=${encodeURIComponent(slug)}&episode=${episodeNum}&guid=${encodeURIComponent(guid)}`;
 
   setState({
     player: {
@@ -466,6 +466,7 @@ function playEpisode(slug, episodeNum, title, feedTitle) {
       open: true,
       slug,
       episodeNum,
+      guid,
       title,
       feedTitle
     }
@@ -494,14 +495,16 @@ async function syncProgress(force = false) {
 
   const slug = state.player.slug;
   const epNum = state.player.episodeNum;
+  const guid = state.player.guid;
   const position = audio.currentTime;
   const duration = audio.duration || 0;
 
   // Update local state immediately for responsiveness
-  if (state.feeds[slug] && state.feeds[slug].episodes[epNum - 1]) {
-    state.feeds[slug].episodes[epNum - 1].progress = position;
+  const epIdx = findEpisodeIdx(slug, epNum, guid);
+  if (epIdx !== -1) {
+    state.feeds[slug].episodes[epIdx].progress = position;
     if (duration > 0) {
-      state.feeds[slug].episodes[epNum - 1].duration_seconds = duration;
+      state.feeds[slug].episodes[epIdx].duration_seconds = duration;
     }
     render(); // Re-render to show updated progress bar
   }
@@ -513,13 +516,14 @@ async function syncProgress(force = false) {
   const res = await api('save_progress', {
     slug,
     episode: epNum,
+    guid,
     position,
     duration
   });
 
   if (res.auto_played) {
-    if (state.feeds[slug] && state.feeds[slug].episodes[epNum - 1]) {
-      state.feeds[slug].episodes[epNum - 1].played = true;
+    if (epIdx !== -1) {
+      state.feeds[slug].episodes[epIdx].played = true;
       render();
     }
   }
@@ -548,12 +552,12 @@ function setPlayerSpeed(rate) {
 }
 
 // ── Downloads ───────────────────────────────────────────────────────────────
-function sseDownloadOne(slug, epNum, title, feedTitle) {
+function sseDownloadOne(slug, epNum, title, feedTitle, guid = '') {
   // Initialize download in state
   const downloads = [...state.downloads];
-  const existingIdx = downloads.findIndex(d => d.slug === slug && d.epNum === epNum);
+  const existingIdx = downloads.findIndex(d => d.slug === slug && d.guid === guid && (guid || d.epNum === epNum));
   const newDl = {
-    slug, epNum, title, feedTitle,
+    slug, epNum, guid, title, feedTitle,
     pct: -1, mbDone: 0, mbTotal: null,
     status: 'Connecting…', done: false, error: null
   };
@@ -563,13 +567,13 @@ function sseDownloadOne(slug, epNum, title, feedTitle) {
 
   setState({ downloads });
 
-  const url = `?action=sse_download&slug=${encodeURIComponent(slug)}&episode=${epNum}`;
+  const url = `?action=sse_download&slug=${encodeURIComponent(slug)}&episode=${epNum}&guid=${encodeURIComponent(guid)}`;
   const es = new EventSource(url);
 
   es.onmessage = (e) => {
     const d = JSON.parse(e.data);
     const curDownloads = [...state.downloads];
-    const idx = curDownloads.findIndex(dl => dl.slug === slug && dl.epNum === epNum);
+    const idx = curDownloads.findIndex(dl => dl.slug === slug && dl.guid === guid && (guid || dl.epNum === epNum));
     if (idx === -1) return;
 
     if (d.error) {
@@ -619,14 +623,15 @@ async function doDownload(all) {
   if (epVal) {
     if (!slug) { toast('Select a feed first', 'error'); return; }
     const feed = feeds[slug];
-    const ep = feed.episodes[parseInt(epVal) - 1];
-    if (ep) queue.push({ slug, episode: parseInt(epVal), title: ep.title, feedTitle: feed.meta.title });
+    const epNum = parseInt(epVal);
+    const ep = feed.episodes[epNum - 1];
+    if (ep) queue.push({ slug, episode: epNum, guid: ep.guid, title: ep.title, feedTitle: feed.meta.title });
   } else {
     const targets = slug ? { [slug]: feeds[slug] } : feeds;
     for (const [s, feed] of Object.entries(targets)) {
       feed.episodes.forEach((ep, i) => {
         if (all || !ep.local_path) {
-          queue.push({ slug: s, episode: i + 1, title: ep.title, feedTitle: feed.meta.title });
+          queue.push({ slug: s, episode: i + 1, guid: ep.guid, title: ep.title, feedTitle: feed.meta.title });
         }
       });
     }
@@ -636,7 +641,7 @@ async function doDownload(all) {
 
   toast(`Queuing ${queue.length} download(s)…`, 'info');
   for (const item of queue) {
-    sseDownloadOne(item.slug, item.episode, item.title, item.feedTitle);
+    sseDownloadOne(item.slug, item.episode, item.title, item.feedTitle, item.guid);
     await new Promise(r => setTimeout(r, 200));
   }
 }
@@ -652,10 +657,10 @@ function loadStatus() {
   setState({ statusSlug: slug, statusCount: count });
 }
 
-async function quickMark(slug, episode, wasPlayed) {
-  const data = await api('mark_played', { slug, episode, unplayed: wasPlayed ? '1' : '0' });
+async function quickMark(slug, episode, wasPlayed, guid = '') {
+  const data = await api('mark_played', { slug, episode, guid, unplayed: wasPlayed ? '1' : '0' });
   if (data.success) {
-    toast(`Episode ${episode} marked ${wasPlayed ? 'unplayed' : 'played'}`, 'success');
+    toast(`Episode marked ${wasPlayed ? 'unplayed' : 'played'}`, 'success');
     await refreshData();
   }
 }
@@ -697,9 +702,9 @@ async function populateDlEpisodes() {
   });
 }
 
-function startDownloadFromStatus(slug, epNum, title, feedTitle) {
+function startDownloadFromStatus(slug, epNum, title, feedTitle, guid = '') {
   setState({ activeTab: 'tab-download' });
-  sseDownloadOne(slug, epNum, title, feedTitle);
+  sseDownloadOne(slug, epNum, title, feedTitle, guid);
 }
 
 function confirmRemove() {
@@ -714,10 +719,11 @@ function confirmRemove() {
   });
 }
 
-function showEpisodeDetail(slug, epNum) {
+function showEpisodeDetail(slug, epNum, guid = '') {
   const feed = state.feeds[slug];
   if (!feed) return;
-  const ep = feed.episodes[epNum - 1];
+  const idx = findEpisodeIdx(slug, epNum, guid);
+  const ep = (idx !== -1) ? feed.episodes[idx] : null;
   if (!ep) return;
 
   document.getElementById('detail-feed-name').textContent = feed.meta.title + ' [' + slug + ']';
@@ -747,7 +753,7 @@ function showEpisodeDetail(slug, epNum) {
   mediaBtn.className = 'btn btn-primary';
   if (ep.local_path) {
     mediaBtn.textContent = '▶ Play';
-    mediaBtn.addEventListener('click', () => { closeDetail(); playEpisode(slug, epNum, ep.title, feed.meta.title); });
+    mediaBtn.addEventListener('click', () => { closeDetail(); playEpisode(slug, epNum, ep.title, feed.meta.title, guid); });
     actions.appendChild(mediaBtn);
 
     const delBtn = document.createElement('button');
@@ -755,7 +761,7 @@ function showEpisodeDetail(slug, epNum) {
     delBtn.textContent = '✕ Delete File';
     delBtn.addEventListener('click', async () => {
       closeDetail();
-      const r = await api('remove_download', { slug, episode: epNum });
+      const r = await api('remove_download', { slug, episode: epNum, guid });
       if (r.success) {
         toast('Download removed', 'success');
         await refreshData();
@@ -766,14 +772,14 @@ function showEpisodeDetail(slug, epNum) {
     actions.appendChild(delBtn);
   } else {
     mediaBtn.textContent = '⬇ Download';
-    mediaBtn.addEventListener('click', () => { closeDetail(); startDownloadFromStatus(slug, epNum, ep.title, feed.meta.title); });
+    mediaBtn.addEventListener('click', () => { closeDetail(); startDownloadFromStatus(slug, epNum, ep.title, feed.meta.title, guid); });
     actions.appendChild(mediaBtn);
   }
 
   const markBtn = document.createElement('button');
   markBtn.className = 'btn btn-ghost';
   markBtn.textContent = ep.played ? '✕ Mark Unplayed' : '✔ Mark Played';
-  markBtn.addEventListener('click', () => { closeDetail(); quickMark(slug, epNum, ep.played); });
+  markBtn.addEventListener('click', () => { closeDetail(); quickMark(slug, epNum, ep.played, guid); });
   actions.appendChild(markBtn);
 
   document.getElementById('detail-overlay').classList.add('open');
@@ -837,6 +843,17 @@ function escHtml(s) {
 }
 function escJs(s) {
   return String(s).replace(/'/g, "\\'");
+}
+
+function findEpisodeIdx(slug, episodeNum, guid = '') {
+  const feed = state.feeds[slug] || {};
+  const episodes = feed.episodes || [];
+  if (guid) {
+    const idx = episodes.findIndex(e => e.guid === guid);
+    if (idx !== -1) return idx;
+  }
+  const idx = episodeNum - 1;
+  return episodes[idx] ? idx : -1;
 }
 function fmtDate(s) {
   if (!s) return '';

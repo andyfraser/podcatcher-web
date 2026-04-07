@@ -47,3 +47,22 @@ function safe_filename(string $title, string $url): string {
     $name   = trim($name, '-');
     return substr($name, 0, 80) . $ext;
 }
+
+function delete_dir(string $path): bool {
+    if (!is_dir($path)) return false;
+    $files = array_diff(scandir($path), ['.', '..']);
+    foreach ($files as $file) {
+        (is_dir("$path/$file")) ? delete_dir("$path/$file") : unlink("$path/$file");
+    }
+    return rmdir($path);
+}
+
+function find_episode_idx(array $episodes, int $episodeNum, ?string $guid = null): int {
+    if ($guid) {
+        foreach ($episodes as $idx => $ep) {
+            if (($ep['guid'] ?? '') === $guid) return $idx;
+        }
+    }
+    $idx = $episodeNum - 1;
+    return (isset($episodes[$idx])) ? $idx : -1;
+}
