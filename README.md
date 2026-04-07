@@ -1,5 +1,9 @@
 # Podcatcher Web
 
+![PHP Version](https://img.shields.io/badge/PHP-%3E%3D%208.1-777bb4?logo=php)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
+
 A self-hosted PHP web interface for managing podcast subscriptions. Subscribe to RSS feeds, download episodes, track what you've listened to, and play audio directly in the browser — no account, no cloud, no ads.
 
 Designed as a web front-end companion to the [Podcatcher CLI](https://github.com/podcatcher) Python tool. Both share the same `~/.podcatcher/` data directory, so you can use either interchangeably.
