@@ -12,12 +12,14 @@ Designed as a web front-end companion to the [Podcatcher CLI](https://github.com
 - **Subscribe** to any standard RSS/Atom podcast feed by URL
 - **Update** feeds to check for new episodes — manually in the UI or automatically via CLI
 - **Download** episodes to disk with a real-time progress bar (Server-Sent Events)
-- **Persistent Progress**: Your playback position is saved to the server and automatically resumed on any device
+- **Persistent Progress**: Your playback position is saved to the server and automatically resumed on any device. Episodes are marked as played automatically when nearly finished.
 - **Advanced Player**: Skip (+/- 10s, +/- 30s) and variable playback speed controls
 - **Themes**: Support for System, Light, and Dark modes via the Settings tab
-- **Search** across all episode titles and descriptions
+- **Search**: Across all episode titles and descriptions with "Show More" toggles for long summaries
 - **Track** played/unplayed state per episode
-- **Remove** feeds (downloaded files are kept)
+- **Manage Downloads**: Download individual episodes or auto-download all new episodes during updates. Remove specific downloads to reclaim space without losing your place.
+- **Auto-Cleanup**: Episodes removed from the RSS feed by the publisher are automatically cleaned up from local storage.
+- **Remove Feeds**: Completely remove a subscription and all its downloaded episodes.
 - **Security**: Built-in CSRF protection for all state-changing actions
 
 ---
