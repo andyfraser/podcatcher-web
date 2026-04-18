@@ -19,6 +19,9 @@ function load_feeds(): array {
 }
 
 function save_feeds(array $feeds): void {
+    if (file_exists(FEEDS_FILE)) {
+        copy(FEEDS_FILE, FEEDS_FILE . '.bak');
+    }
     file_put_contents(FEEDS_FILE, json_encode($feeds, JSON_PRETTY_PRINT));
 }
 

@@ -393,6 +393,13 @@ async function doUpdate() {
       const newEps = d.new_episodes || [];
       if (autoDl && newEps.length) {
         setState({ activeTab: 'tab-download' });
+        const preDownloads = [...state.downloads];
+        for (let i = newEps.length - 1; i >= 0; i--) {
+          const ep = newEps[i];
+          const exists = preDownloads.some(d => d.slug === ep.slug && d.guid === ep.guid);
+          if (!exists) preDownloads.unshift({ slug: ep.slug, epNum: ep.ep_num, guid: ep.guid, title: ep.title, feedTitle: ep.feed_title, pct: -1, mbDone: 0, mbTotal: null, status: 'Queued…', done: false, error: null });
+        }
+        setState({ downloads: preDownloads });
         toast(`Downloading ${newEps.length} new episode(s)…`, 'info');
         for (const ep of newEps) {
           sseDownloadOne(ep.slug, ep.ep_num, ep.title, ep.feed_title);
@@ -552,6 +559,14 @@ function setPlayerSpeed(rate) {
 }
 
 // ── Downloads ───────────────────────────────────────────────────────────────
+function fadeThenRemove(slug, epNum, guid) {
+  const id = `dl-item-${slug}-${epNum}`;
+  setTimeout(() => {
+    document.getElementById(id)?.classList.add('fading');
+    setTimeout(() => setState({ downloads: state.downloads.filter(d => !(d.slug === slug && d.guid === guid && (guid || d.epNum === epNum))) }), 1000);
+  }, 3000);
+}
+
 function sseDownloadOne(slug, epNum, title, feedTitle, guid = '') {
   // Initialize download in state
   const downloads = [...state.downloads];
@@ -581,6 +596,7 @@ function sseDownloadOne(slug, epNum, title, feedTitle, guid = '') {
       curDownloads[idx] = { ...curDownloads[idx], error: d.error, status: '✗ ' + d.error };
       setState({ downloads: curDownloads });
       toast(`Download failed: ${d.error}`, 'error');
+      fadeThenRemove(slug, epNum, guid);
       return;
     }
 
@@ -597,7 +613,8 @@ function sseDownloadOne(slug, epNum, title, feedTitle, guid = '') {
       es.close();
       setState({ downloads: curDownloads });
       toast(`Downloaded: ${title.substring(0, 50)}`, 'success');
-      refreshData(); // Refresh to update "Downloaded" status in episode lists
+      refreshData();
+      fadeThenRemove(slug, epNum, guid);
     } else {
       setState({ downloads: curDownloads });
     }
@@ -610,6 +627,7 @@ function sseDownloadOne(slug, epNum, title, feedTitle, guid = '') {
     if (idx !== -1 && !curDownloads[idx].done && !curDownloads[idx].error) {
       curDownloads[idx] = { ...curDownloads[idx], error: 'Connection lost', status: '✗ Connection lost' };
       setState({ downloads: curDownloads });
+      fadeThenRemove(slug, epNum, guid);
     }
   };
 }
@@ -638,6 +656,15 @@ async function doDownload(all) {
   }
 
   if (!queue.length) { toast('Nothing to download', 'info'); return; }
+
+  // Pre-populate downloads list in queue order so position is fixed before SSE starts
+  const preDownloads = [...state.downloads];
+  for (let i = queue.length - 1; i >= 0; i--) {
+    const item = queue[i];
+    const exists = preDownloads.some(d => d.slug === item.slug && d.guid === item.guid && (item.guid || d.epNum === item.episode));
+    if (!exists) preDownloads.unshift({ slug: item.slug, epNum: item.episode, guid: item.guid, title: item.title, feedTitle: item.feedTitle, pct: -1, mbDone: 0, mbTotal: null, status: 'Queued…', done: false, error: null });
+  }
+  setState({ downloads: preDownloads });
 
   toast(`Queuing ${queue.length} download(s)…`, 'info');
   for (const item of queue) {

@@ -774,7 +774,9 @@ td.actions { white-space: nowrap; text-align: right; }
   padding: 10px 12px;
   margin-bottom: 8px;
   font-size: 12px;
+  transition: opacity 1s ease;
 }
+.dl-item.fading { opacity: 0; }
 .dl-item-title { color: var(--text); margin-bottom: 6px; font-family: var(--sans); }
 .dl-item-bar-wrap {
   height: 4px;
