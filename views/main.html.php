@@ -20,6 +20,15 @@
 
 <div class="app">
 
+  <!-- ── Mobile Header ── -->
+  <div class="mobile-header" id="mobile-header">
+    <button class="hamburger" id="sidebar-toggle" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="mobile-logo">Podcatcher</div>
+  </div>
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
   <!-- ── Sidebar ── -->
   <aside class="sidebar">
     <div class="logo">
@@ -99,10 +108,10 @@
               ?>
               <?php foreach ($sorted_feeds as $slug => $feed): ?>
               <tr>
-                <td class="title"><?= htmlspecialchars($feed['meta']['title']) ?></td>
-                <td class="num"><?= count($feed['episodes'] ?? []) ?></td>
-                <td class="date"><?= ($lu = $feed['last_updated'] ?? '') ? date('D, j M Y', strtotime($lu)) : '' ?></td>
-                <td class="slug"><?= htmlspecialchars($slug) ?></td>
+                <td class="title" data-label="Title"><?= htmlspecialchars($feed['meta']['title']) ?></td>
+                <td class="num" data-label="Episodes"><?= count($feed['episodes'] ?? []) ?></td>
+                <td class="date" data-label="Last Updated"><?= ($lu = $feed['last_updated'] ?? '') ? date('D, j M Y', strtotime($lu)) : '' ?></td>
+                <td class="slug" data-label="Slug"><?= htmlspecialchars($slug) ?></td>
                 <td class="actions">
                   <button class="btn btn-ghost btn-sm" onclick="openStatus('<?= htmlspecialchars($slug) ?>')">status</button>
                 </td>
@@ -405,6 +414,7 @@
   </div>
   <div class="player-controls">
     <div class="player-btns">
+      <button class="btn-player" id="player-play-btn" onclick="togglePlay()" title="Play / Pause">▶</button>
       <button class="btn-player" onclick="skipPlayer(-30)" title="Back 30s">⟲ 30</button>
       <button class="btn-player" onclick="skipPlayer(-10)" title="Back 10s">⟲ 10</button>
       <button class="btn-player" onclick="skipPlayer(10)" title="Forward 10s">10 ⟳</button>
@@ -417,7 +427,12 @@
         <option value="2">2.0x</option>
       </select>
     </div>
-    <audio id="player-audio" controls preload="metadata"></audio>
+    <div class="player-seek-row">
+      <span class="player-time" id="player-time">0:00</span>
+      <input type="range" id="player-seek" min="0" max="100" step="0.1" value="0">
+      <span class="player-time" id="player-duration">--:--</span>
+    </div>
+    <audio id="player-audio" preload="metadata"></audio>
   </div>
   <button id="player-close" onclick="closePlayer()" title="Close player">✕</button>
 </div>

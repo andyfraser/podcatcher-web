@@ -79,10 +79,10 @@ function renderFeedList() {
   for (const [slug, feed] of sorted) {
     html += `
       <tr>
-        <td class="title">${escHtml(feed.meta.title)}</td>
-        <td class="num">${(feed.episodes || []).length}</td>
-        <td class="date">${escHtml(fmtDate(feed.last_updated))}</td>
-        <td class="slug">${escHtml(slug)}</td>
+        <td class="title" data-label="Title">${escHtml(feed.meta.title)}</td>
+        <td class="num" data-label="Episodes">${(feed.episodes || []).length}</td>
+        <td class="date" data-label="Last Updated">${escHtml(fmtDate(feed.last_updated))}</td>
+        <td class="slug" data-label="Slug">${escHtml(slug)}</td>
         <td class="actions">
           <button class="btn btn-ghost btn-sm" onclick="openStatus('${escHtml(slug)}')">status</button>
         </td>
@@ -290,12 +290,15 @@ function updateSidebarCounts() {
 }
 
 // ── Event Handlers ──────────────────────────────────────────────────────────
+function closeSidebar() { document.body.classList.remove('sidebar-open'); }
+
 document.querySelectorAll('.nav-link').forEach(a => {
   a.addEventListener('click', e => {
     e.preventDefault();
     const tabId = a.dataset.tab;
     setState({ activeTab: tabId });
     if (tabId === 'tab-list') refreshData();
+    closeSidebar();
   });
 });
 
@@ -481,6 +484,12 @@ function playEpisode(slug, episodeNum, title, feedTitle, guid = '') {
 
   audio.src = src;
   audio.playbackRate = state.player.speed;
+  const seekEl = document.getElementById('player-seek');
+  const timeEl = document.getElementById('player-time');
+  const durEl  = document.getElementById('player-duration');
+  if (seekEl) seekEl.value = 0;
+  if (timeEl) timeEl.textContent = '0:00';
+  if (durEl)  durEl.textContent  = '--:--';
 
   // Resume from saved progress once metadata is loaded
   const onMetadata = () => {
@@ -543,6 +552,12 @@ function closePlayer() {
   audio.pause();
   audio.src = '';
   setState({ player: { ...state.player, open: false } });
+}
+
+function togglePlay() {
+  const audio = document.getElementById('player-audio');
+  if (audio.paused) audio.play().catch(() => {});
+  else audio.pause();
 }
 
 function skipPlayer(seconds) {
@@ -882,6 +897,12 @@ function findEpisodeIdx(slug, episodeNum, guid = '') {
   const idx = episodeNum - 1;
   return episodes[idx] ? idx : -1;
 }
+function fmtTime(s) {
+  if (!isFinite(s) || s < 0) return '--:--';
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, '0')}`;
+}
 function fmtDate(s) {
   if (!s) return '';
   const d = new Date(s.replace(' ', 'T'));
@@ -916,11 +937,32 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Audio player listeners
   const audio = document.getElementById('player-audio');
-  audio.addEventListener('pause', () => syncProgress(true));
-  audio.addEventListener('ended', () => syncProgress(true));
-  
+  audio.addEventListener('pause',  () => { syncProgress(true); updatePlayBtn(); });
+  audio.addEventListener('play',   updatePlayBtn);
+  audio.addEventListener('ended',  () => syncProgress(true));
+  audio.addEventListener('loadedmetadata', () => {
+    const el = document.getElementById('player-duration');
+    if (el) el.textContent = fmtTime(audio.duration);
+  });
+
+  function updatePlayBtn() {
+    const btn = document.getElementById('player-play-btn');
+    if (btn) btn.textContent = audio.paused ? '▶' : '⏸';
+  }
+
+  document.getElementById('player-seek').addEventListener('input', e => {
+    if (audio.duration > 0) audio.currentTime = (e.target.value / 100) * audio.duration;
+    const el = document.getElementById('player-time');
+    if (el) el.textContent = fmtTime(audio.currentTime);
+  });
+
   // Update local UI state as it plays
   audio.addEventListener('timeupdate', () => {
+    const seek = document.getElementById('player-seek');
+    const timeEl = document.getElementById('player-time');
+    if (seek && audio.duration > 0) seek.value = (audio.currentTime / audio.duration) * 100;
+    if (timeEl) timeEl.textContent = fmtTime(audio.currentTime);
+
     if (!state.player.slug) return;
     const slug = state.player.slug;
     const epNum = state.player.episodeNum;
@@ -929,12 +971,18 @@ window.addEventListener('DOMContentLoaded', () => {
       if (audio.duration > 0) {
         state.feeds[slug].episodes[epNum - 1].duration_seconds = audio.duration;
       }
-      render(); 
+      render();
     }
   });
 
   // Periodic sync every 15 seconds
   setInterval(syncProgress, 15000);
+
+  // Sidebar hamburger
+  document.getElementById('sidebar-toggle').addEventListener('click', () => {
+    document.body.classList.toggle('sidebar-open');
+  });
+  document.getElementById('sidebar-backdrop').addEventListener('click', closeSidebar);
 
   // Global listeners
   document.getElementById('detail-overlay').addEventListener('click', e => {
