@@ -1,23 +1,25 @@
 <?php
 // lib/rss.php - RSS and URL fetching logic for Podcatcher Web
 
-function fetch_url(string $url, int $timeout = 15): array {
-    $ctx  = stream_context_create([
-        'http' => [
-            'method'          => 'GET',
-            'header'          => 'User-Agent: ' . USER_AGENT . "\r\n",
-            'timeout'         => $timeout,
-            'follow_location' => 1,
-            'max_redirects'   => 10,
-        ],
-        'ssl'  => ['verify_peer' => true, 'verify_peer_name' => true],
-    ]);
-    $body = @file_get_contents($url, false, $ctx);
-    if ($body === false) {
-        $err = error_get_last();
-        return ['ok' => false, 'error' => $err['message'] ?? 'Unknown error', 'body' => null];
+if (!function_exists('fetch_url')) {
+    function fetch_url(string $url, int $timeout = 15): array {
+        $ctx  = stream_context_create([
+            'http' => [
+                'method'          => 'GET',
+                'header'          => 'User-Agent: ' . USER_AGENT . "\r\n",
+                'timeout'         => $timeout,
+                'follow_location' => 1,
+                'max_redirects'   => 10,
+            ],
+            'ssl'  => ['verify_peer' => true, 'verify_peer_name' => true],
+        ]);
+        $body = @file_get_contents($url, false, $ctx);
+        if ($body === false) {
+            $err = error_get_last();
+            return ['ok' => false, 'error' => $err['message'] ?? 'Unknown error', 'body' => null];
+        }
+        return ['ok' => true, 'error' => null, 'body' => $body];
     }
-    return ['ok' => true, 'error' => null, 'body' => $body];
 }
 
 function parse_feed(string $xml): ?array {

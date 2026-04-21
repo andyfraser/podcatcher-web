@@ -77,6 +77,22 @@ php index.php update --download
 
 ---
 
+## Testing
+
+Podcatcher Web includes a custom unit testing system to ensure core logic remains reliable.
+
+```bash
+# Run all unit tests
+php tests/run.php
+```
+
+The test suite covers:
+- **Utility Functions**: Slugification, filename sanitization, and feed storage logic.
+- **RSS Parsing**: Accuracy of feed and episode extraction from XML.
+- **Actions**: Feed management, marking episodes as played, and progress tracking.
+
+---
+
 ## Project Structure
 
 ```
